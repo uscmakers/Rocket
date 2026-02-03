@@ -10,7 +10,16 @@ from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.utils import configclass
+from isaaclab.sensors import ImuCfg
 
+@configclass
+class RocketSceneCfg(InteractiveSceneCfg):
+    imu: ImuCfg = ImuCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base_link",  # must be a rigid body link
+        update_period=0.0,  # every step
+        history_length=1,
+        debug_vis=False,
+    )
 
 @configclass
 class RocketEnvCfg(DirectRLEnvCfg):
@@ -29,7 +38,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
     robot_cfg: ArticulationCfg = CARTPOLE_CFG.replace(prim_path="/World/envs/env_.*/Robot")
 
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
+    scene: RocketSceneCfg = RocketSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
 
     # custom parameters/scales
     # - controllable joint
