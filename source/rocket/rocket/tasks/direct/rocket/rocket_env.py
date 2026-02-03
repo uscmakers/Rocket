@@ -14,6 +14,8 @@ from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import sample_uniform
+from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.sensors import ImuCfg
 
 from .rocket_env_cfg import RocketEnvCfg
 
@@ -26,6 +28,7 @@ class RocketEnv(DirectRLEnv):
 
         self._cart_dof_idx, _ = self.robot.find_joints(self.cfg.cart_dof_name)
         self._pole_dof_idx, _ = self.robot.find_joints(self.cfg.pole_dof_name)
+        self.imu = self.scene["imu"]
 
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
@@ -48,16 +51,29 @@ class RocketEnv(DirectRLEnv):
     def _pre_physics_step(self, actions: torch.Tensor) -> None:
         self.actions = actions.clone()
 
+        self.scene.update(dt=self.physics_dt)
+        self.imu.update(dt=self.physics_dt, force_compute=True)
+
     def _apply_action(self) -> None:
-        self.robot.set_joint_effort_target(self.actions * self.cfg.action_scale, joint_ids=self._cart_dof_idx)
+        self.robot.set_joint_effort_target(
+            self.actions * self.cfg.action_scale, joint_ids=self._cart_dof_idx
+        )
 
     def _get_observations(self) -> dict:
+        imu = self.imu.data
+        self.joint_pos = self.robot.data.joint_pos
+        self.joint_vel = self.robot.data.joint_vel
+        
         obs = torch.cat(
             (
                 self.joint_pos[:, self._pole_dof_idx[0]].unsqueeze(dim=1),
                 self.joint_vel[:, self._pole_dof_idx[0]].unsqueeze(dim=1),
                 self.joint_pos[:, self._cart_dof_idx[0]].unsqueeze(dim=1),
                 self.joint_vel[:, self._cart_dof_idx[0]].unsqueeze(dim=1),
+                
+                imu.ang_vel_b,  
+                imu.lin_acc_b,
+                imu.quat_w
             ),
             dim=-1,
         )
@@ -84,8 +100,13 @@ class RocketEnv(DirectRLEnv):
         self.joint_vel = self.robot.data.joint_vel
 
         time_out = self.episode_length_buf >= self.max_episode_length - 1
-        out_of_bounds = torch.any(torch.abs(self.joint_pos[:, self._cart_dof_idx]) > self.cfg.max_cart_pos, dim=1)
-        out_of_bounds = out_of_bounds | torch.any(torch.abs(self.joint_pos[:, self._pole_dof_idx]) > math.pi / 2, dim=1)
+        out_of_bounds = torch.any(
+            torch.abs(self.joint_pos[:, self._cart_dof_idx]) > self.cfg.max_cart_pos,
+            dim=1,
+        )
+        out_of_bounds = out_of_bounds | torch.any(
+            torch.abs(self.joint_pos[:, self._pole_dof_idx]) > math.pi / 2, dim=1
+        )
         return out_of_bounds, time_out
 
     def _reset_idx(self, env_ids: Sequence[int] | None):
@@ -128,8 +149,16 @@ def compute_rewards(
 ):
     rew_alive = rew_scale_alive * (1.0 - reset_terminated.float())
     rew_termination = rew_scale_terminated * reset_terminated.float()
-    rew_pole_pos = rew_scale_pole_pos * torch.sum(torch.square(pole_pos).unsqueeze(dim=1), dim=-1)
-    rew_cart_vel = rew_scale_cart_vel * torch.sum(torch.abs(cart_vel).unsqueeze(dim=1), dim=-1)
-    rew_pole_vel = rew_scale_pole_vel * torch.sum(torch.abs(pole_vel).unsqueeze(dim=1), dim=-1)
-    total_reward = rew_alive + rew_termination + rew_pole_pos + rew_cart_vel + rew_pole_vel
+    rew_pole_pos = rew_scale_pole_pos * torch.sum(
+        torch.square(pole_pos).unsqueeze(dim=1), dim=-1
+    )
+    rew_cart_vel = rew_scale_cart_vel * torch.sum(
+        torch.abs(cart_vel).unsqueeze(dim=1), dim=-1
+    )
+    rew_pole_vel = rew_scale_pole_vel * torch.sum(
+        torch.abs(pole_vel).unsqueeze(dim=1), dim=-1
+    )
+    total_reward = (
+        rew_alive + rew_termination + rew_pole_pos + rew_cart_vel + rew_pole_vel
+    )
     return total_reward

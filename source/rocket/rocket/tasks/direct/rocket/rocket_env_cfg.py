@@ -28,7 +28,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
     episode_length_s = 5.0
     # - spaces definition
     action_space = 1
-    observation_space = 4
+    observation_space = 14
     state_space = 0
 
     # simulation
@@ -39,7 +39,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
 
     # scene
     scene: RocketSceneCfg = RocketSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
-
+    
     # custom parameters/scales
     # - controllable joint
     cart_dof_name = "slider_to_cart"
