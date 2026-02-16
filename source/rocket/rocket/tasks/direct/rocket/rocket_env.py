@@ -13,7 +13,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
-from isaaclab.utils.math import sample_uniform
+from isaaclab.utils.math import sample_uniform, quat_rotate
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ImuCfg
 
@@ -107,6 +107,38 @@ class RocketEnv(DirectRLEnv):
         out_of_bounds = out_of_bounds | torch.any(
             torch.abs(self.joint_pos[:, self._pole_dof_idx]) > math.pi / 2, dim=1
         )
+
+        imu = self.imu.data
+        quat_w = imu.quat_w  # (num_envs, 4)
+
+        num_envs = quat_w.shape[0]
+
+        # Rocket's local up axis
+        body_z = torch.tensor(
+            [0.0, 0.0, 1.0],
+            device=quat_w.device,
+            dtype=quat_w.dtype
+        ).expand(num_envs, 3)
+
+        # World up axis
+        world_up = torch.tensor(
+            [0.0, 0.0, 1.0],
+            device=quat_w.device,
+            dtype=quat_w.dtype
+        ).expand(num_envs, 3)
+
+        # Rotate rocket up into world frame
+        body_z_world = quat_rotate(quat_w, body_z)
+
+        # Euclidean distance from upright
+        distance = torch.norm(body_z_world - world_up, dim=-1)
+
+        # Threshold selection:
+        # If rocket tilts 45°, distance ≈ 0.765
+        tilted = distance > 0.75
+
+        out_of_bounds = out_of_bounds | tilted
+
         return out_of_bounds, time_out
 
     def _reset_idx(self, env_ids: Sequence[int] | None):
