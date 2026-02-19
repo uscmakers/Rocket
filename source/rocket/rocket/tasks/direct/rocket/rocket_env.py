@@ -87,10 +87,12 @@ class RocketEnv(DirectRLEnv):
             self.cfg.rew_scale_pole_pos,
             self.cfg.rew_scale_cart_vel,
             self.cfg.rew_scale_pole_vel,
+            self.cfg.rew_scale_upright,
             self.joint_pos[:, self._pole_dof_idx[0]],
             self.joint_vel[:, self._pole_dof_idx[0]],
             self.joint_pos[:, self._cart_dof_idx[0]],
             self.joint_vel[:, self._cart_dof_idx[0]],
+            self.imu.data.quat_w,
             self.reset_terminated,
         )
         return total_reward
@@ -173,10 +175,12 @@ def compute_rewards(
     rew_scale_pole_pos: float,
     rew_scale_cart_vel: float,
     rew_scale_pole_vel: float,
+    rew_scale_upright: float,
     pole_pos: torch.Tensor,
     pole_vel: torch.Tensor,
     cart_pos: torch.Tensor,
     cart_vel: torch.Tensor,
+    quat_w: torch.Tensor,
     reset_terminated: torch.Tensor,
 ):
     rew_alive = rew_scale_alive * (1.0 - reset_terminated.float())
@@ -190,7 +194,32 @@ def compute_rewards(
     rew_pole_vel = rew_scale_pole_vel * torch.sum(
         torch.abs(pole_vel).unsqueeze(dim=1), dim=-1
     )
+
+    # Distance from upright: rotate body z-axis [0,0,1] into world frame
+    # using the IMU quaternion, then measure Euclidean distance to world up [0,0,1].
+    # quat_w is (num_envs, 4) in (w, x, y, z) format.
+    #
+    # For a quaternion q = (w, x, y, z), rotating v = [0,0,1]:
+    #   rotated_x = 2*(x*z + w*y)
+    #   rotated_y = 2*(y*z - w*x)
+    #   rotated_z = 1 - 2*(x^2 + y^2)
+    qw = quat_w[:, 0]
+    qx = quat_w[:, 1]
+    qy = quat_w[:, 2]
+    qz = quat_w[:, 3]
+    body_z_world_x = 2.0 * (qx * qz + qw * qy)
+    body_z_world_y = 2.0 * (qy * qz - qw * qx)
+    body_z_world_z = 1.0 - 2.0 * (qx * qx + qy * qy)
+
+    # Euclidean distance to world up [0, 0, 1]
+    upright_distance = torch.sqrt(
+        body_z_world_x * body_z_world_x
+        + body_z_world_y * body_z_world_y
+        + (body_z_world_z - 1.0) * (body_z_world_z - 1.0)
+    )
+    rew_upright = rew_scale_upright * upright_distance
+
     total_reward = (
-        rew_alive + rew_termination + rew_pole_pos + rew_cart_vel + rew_pole_vel
+        rew_alive + rew_termination + rew_pole_pos + rew_cart_vel + rew_pole_vel + rew_upright
     )
     return total_reward
