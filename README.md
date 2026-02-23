@@ -250,3 +250,36 @@ Job outputs are saved to `jobs/rocket_<jobid>.out` and errors to `jobs/rocket_<j
 - sbatch scripts automatically install/update packages on each run, the sif container image is read-only
 
 # Running checkpoints on Roboland Isaac Sim
+
+Once you have connected to the Roboland computer, Navigate to the Rocket directory and run the checkpoint script:
+```bash
+cd Rocket
+./run.sh
+```
+
+This will play the currently loaded checkpoint in real-time on Isaac Sim.
+
+** IMPORTANT: If you have too many isaac sim simulations running simultaneously, you may run out of memory and get a ```CUDA: OUT OF MEMORY``` error. In this case, you should exit out of all other isaac-sim simulations. Run `nvidia-smi` in terminal to debug your GPU usage if needed. 
+
+### Running Different Checkpoints
+
+To run a new checkpoint:
+
+1. **Verify the checkpoint exists**:
+```
+   Rocket/logs/rl_games/rocket_direct/<checkpoint_name>/nn/rocket_direct.pth
+```
+
+2. **If the checkpoint is missing:**
+   - Push the checkpoint from the training computer to the Git repo
+   - Run `git pull` on Roboland to get the latest checkpoint
+
+3. **Update the checkpoint path** in `run.sh`:
+```bash
+   --checkpoint logs/rl_games/rocket_direct/<your_checkpoint_name>/nn/rocket_direct.pth
+```
+
+4. **Re-run:**
+```bash
+   ./run.sh
+```
