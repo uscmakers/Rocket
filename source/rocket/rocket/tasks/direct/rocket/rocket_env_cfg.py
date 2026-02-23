@@ -57,7 +57,7 @@ class RocketSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Robot/Torso_Assy_1",  # Updated to match URDF base link
         update_period=0.0,  # every step
         history_length=1,
-        debug_vis=False,
+        debug_vis=True,
     )
 
     # Camera for video recording - 45° angle view
@@ -65,19 +65,19 @@ class RocketSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Camera",
         update_period=0.0,  # Increase update period for video recording to reduce overhead and speed up training
         offset=TiledCameraCfg.OffsetCfg(
-            pos=(2.5, 2.5, 2.0),  # 45° angle position
+            pos=(0.5, 0.5, 0.5),  # 45° angle position
             rot=(0.7071, 0.0, 0.0, 0.7071),  # Look down at robot (quaternion for -45° pitch)
             convention="world",
         ),
         data_types=["rgb"],
         spawn=sim_utils.PinholeCameraCfg(
-            focal_length=24.0,
+            focal_length=48.0,
             focus_distance=400.0,
-            horizontal_aperture=20.955,
+            horizontal_aperture=21.0,
             clipping_range=(0.1, 20.0),
         ),
-        width=200,
-        height=200,
+        width=300,
+        height=300,
     )
 
 @configclass
@@ -88,7 +88,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
 
     # spaces definition - UPDATED for 6 DOF robot
     action_space = 6  # 6 joints to control
-    observation_space = 22  # 6 joint pos + 6 joint vel + 3 ang_vel + 3 lin_acc + 4 quat
+    observation_space = 20  # 6 joint pos + 4 stepper joint vel + 3 ang_vel + 3 lin_acc + 4 quat
     state_space = 0
 
     # simulation
@@ -105,14 +105,8 @@ class RocketEnvCfg(DirectRLEnvCfg):
     scene: RocketSceneCfg = RocketSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
 
     # robot joint names (from URDF)
-    joint_names = [
-        "Revolute1",  # Left hip yaw
-        "Revolute2",  # Right hip yaw
-        "Revolute3",  # Left hip roll
-        "Revolute4",  # Right hip roll
-        "Revolute5",  # Left knee
-        "Revolute6",  # Right knee
-    ]
+    servo_joint_names = ["Revolute1", "Revolute2"]        # hip yaw (position-controlled servos)
+    stepper_joint_names = ["Revolute3", "Revolute4", "Revolute5", "Revolute6"]  # hip roll + knee (steppers)
 
     # action scale
     action_scale = 10.0  # [Nm] torque multiplier

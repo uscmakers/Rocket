@@ -25,8 +25,10 @@ class RocketEnv(DirectRLEnv):
     def __init__(self, cfg: RocketEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        # Find all 6 joint indices
-        self._joint_ids, _ = self.robot.find_joints(self.cfg.joint_names)
+        # Find joint indices by group
+        self._servo_joint_ids, _ = self.robot.find_joints(self.cfg.servo_joint_names)
+        self._stepper_joint_ids, _ = self.robot.find_joints(self.cfg.stepper_joint_names)
+        self._joint_ids = self._servo_joint_ids + self._stepper_joint_ids
         self.imu = self.scene["imu"]
 
         self.joint_pos = self.robot.data.joint_pos
@@ -34,6 +36,11 @@ class RocketEnv(DirectRLEnv):
 
         # Extract root z-height for testing purposes
         print("Resting height:", self.robot.data.root_pos_w[:, 2].mean().item())
+        print(f"IMU position in world frame: {self.imu.data.pos_w.mean(dim=0)}")
+        print(f"IMU orientation in world frame (quat): {self.imu.data.quat_w.mean(dim=0)}")
+
+        if cfg.scene.tiled_camera is not None: 
+            print("Scene setup complete with the following camera config: ", cfg.scene.tiled_camera)
 
 
     def _setup_scene(self):
@@ -70,14 +77,11 @@ class RocketEnv(DirectRLEnv):
 
         obs = torch.cat(
             (
-                # All 6 joint positions
-                self.joint_pos[:, self._joint_ids],  # (6,)
-                # All 6 joint velocities
-                self.joint_vel[:, self._joint_ids],  # (6,)
-                # IMU data
-                imu.ang_vel_b,   # (3,) angular velocity
-                imu.lin_acc_b,   # (3,) linear acceleration
-                imu.quat_w,      # (4,) orientation quaternion
+                self.joint_pos[:, self._joint_ids],          # (6,) all joint positions
+                self.joint_vel[:, self._stepper_joint_ids],  # (4,) stepper joint velocities only
+                imu.ang_vel_b,                               # (3,) angular velocity
+                imu.lin_acc_b,                               # (3,) linear acceleration
+                imu.quat_w,                                  # (4,) orientation quaternion
             ),
             dim=-1,
         )

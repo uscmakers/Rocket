@@ -65,7 +65,6 @@ from rl_games.common import env_configurations, vecenv
 from rl_games.common.player import BasePlayer
 from rl_games.torch_runner import Runner
 
-from isaaclab.devices.openxr import remove_camera_configs
 from isaaclab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,
@@ -98,8 +97,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
 
     # remove camera configs if enable cameras is not enabled
-    if not args_cli.enable_cameras:
-        env_cfg = remove_camera_configs(env_cfg)
+    if not args_cli.enable_cameras and hasattr(env_cfg.scene, "tiled_camera"):
+        del env_cfg.scene.tiled_camera
 
     # randomly sample a seed if seed = -1
     if args_cli.seed == -1:
