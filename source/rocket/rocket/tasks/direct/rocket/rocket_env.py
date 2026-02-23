@@ -4,8 +4,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from __future__ import annotations
+from typing import Dict, Tuple
 
-import math
 import torch
 from collections.abc import Sequence
 
@@ -13,7 +13,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
-from isaaclab.utils.math import sample_uniform, quat_rotate
+from isaaclab.utils.math import sample_uniform, quat_apply, quat_inv
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ImuCfg
 
@@ -26,12 +26,26 @@ class RocketEnv(DirectRLEnv):
     def __init__(self, cfg: RocketEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        self._cart_dof_idx, _ = self.robot.find_joints(self.cfg.cart_dof_name)
-        self._pole_dof_idx, _ = self.robot.find_joints(self.cfg.pole_dof_name)
+        # Find joint indices by group
+        self._servo_joint_ids, _ = self.robot.find_joints(self.cfg.servo_joint_names)
+        self._stepper_joint_ids, _ = self.robot.find_joints(self.cfg.stepper_joint_names)
+        self._joint_ids = self._servo_joint_ids + self._stepper_joint_ids
         self.imu = self.scene["imu"]
 
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
+
+        # Extract root z-height for testing purposes
+        print("Resting height:", self.robot.data.root_pos_w[:, 2].mean().item())
+        print(f"IMU position in world frame: {self.imu.data.pos_w.mean(dim=0)}")
+        print(f"IMU orientation in world frame (quat): {self.imu.data.quat_w.mean(dim=0)}")
+
+        # Log dict for reward components and diagnostics
+        self.extras["log"] = {}
+
+        if cfg.scene.tiled_camera is not None: 
+            print("Scene setup complete with the following camera config: ", cfg.scene.tiled_camera)
+
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot_cfg)
@@ -52,28 +66,26 @@ class RocketEnv(DirectRLEnv):
         self.actions = actions.clone()
 
         self.scene.update(dt=self.physics_dt)
-        self.imu.update(dt=self.physics_dt, force_compute=True)
+        self.imu.update(dt=self.physics_dt)
 
     def _apply_action(self) -> None:
+        # Apply torques to all 6 joints
         self.robot.set_joint_effort_target(
-            self.actions * self.cfg.action_scale, joint_ids=self._cart_dof_idx
+            self.actions * self.cfg.action_scale, joint_ids=self._joint_ids
         )
 
     def _get_observations(self) -> dict:
         imu = self.imu.data
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
-        
+
         obs = torch.cat(
             (
-                self.joint_pos[:, self._pole_dof_idx[0]].unsqueeze(dim=1),
-                self.joint_vel[:, self._pole_dof_idx[0]].unsqueeze(dim=1),
-                self.joint_pos[:, self._cart_dof_idx[0]].unsqueeze(dim=1),
-                self.joint_vel[:, self._cart_dof_idx[0]].unsqueeze(dim=1),
-                
-                imu.ang_vel_b,  
-                imu.lin_acc_b,
-                imu.quat_w
+                self.joint_pos[:, self._joint_ids],          # (6,) all joint positions
+                self.joint_vel[:, self._stepper_joint_ids],  # (4,) stepper joint velocities only
+                imu.ang_vel_b,                               # (3,) angular velocity
+                imu.lin_acc_b,                               # (3,) linear acceleration
+                imu.quat_w,                                  # (4,) orientation quaternion
             ),
             dim=-1,
         )
@@ -81,20 +93,23 @@ class RocketEnv(DirectRLEnv):
         return observations
 
     def _get_rewards(self) -> torch.Tensor:
-        total_reward = compute_rewards(
-            self.cfg.rew_scale_alive,
-            self.cfg.rew_scale_terminated,
-            self.cfg.rew_scale_pole_pos,
-            self.cfg.rew_scale_cart_vel,
-            self.cfg.rew_scale_pole_vel,
-            self.cfg.rew_scale_upright,
-            self.joint_pos[:, self._pole_dof_idx[0]],
-            self.joint_vel[:, self._pole_dof_idx[0]],
-            self.joint_pos[:, self._cart_dof_idx[0]],
-            self.joint_vel[:, self._cart_dof_idx[0]],
-            self.imu.data.quat_w,
-            self.reset_terminated,
+        total_reward, components = compute_rewards(
+            rew_scale_alive=self.cfg.rew_scale_alive,
+            rew_scale_terminated=self.cfg.rew_scale_terminated,
+            rew_scale_upright=self.cfg.rew_scale_upright,
+            rew_scale_joint_vel=self.cfg.rew_scale_joint_vel,
+            rew_scale_energy=self.cfg.rew_scale_energy,
+            rew_scale_lin_vel=self.cfg.rew_scale_lin_vel,
+            quat_w=self.imu.data.quat_w,
+            root_lin_vel_w=self.robot.data.root_lin_vel_w[:, :3],
+            joint_vel=self.joint_vel[:, self._joint_ids],
+            actions=self.actions,
+            reset_terminated=self.reset_terminated,
         )
+        
+        self.extras["log"].update({
+            f"rewards/{k}": v.mean().item() for k, v in components.items()
+        })
         return total_reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -102,17 +117,9 @@ class RocketEnv(DirectRLEnv):
         self.joint_vel = self.robot.data.joint_vel
 
         time_out = self.episode_length_buf >= self.max_episode_length - 1
-        out_of_bounds = torch.any(
-            torch.abs(self.joint_pos[:, self._cart_dof_idx]) > self.cfg.max_cart_pos,
-            dim=1,
-        )
-        out_of_bounds = out_of_bounds | torch.any(
-            torch.abs(self.joint_pos[:, self._pole_dof_idx]) > math.pi / 2, dim=1
-        )
 
         imu = self.imu.data
         quat_w = imu.quat_w  # (num_envs, 4)
-
         num_envs = quat_w.shape[0]
 
         # Rocket's local up axis
@@ -130,18 +137,15 @@ class RocketEnv(DirectRLEnv):
         ).expand(num_envs, 3)
 
         # Rotate rocket up into world frame
-        body_z_world = quat_rotate(quat_w, body_z)
+        body_z_world = quat_apply(quat_w, body_z)
 
         # Euclidean distance from upright
         distance = torch.norm(body_z_world - world_up, dim=-1)
 
-        # Threshold selection:
-        # If rocket tilts 45°, distance ≈ 0.765
-        tilted = distance > 0.75
+        # Termination conditions
+        tilted = distance > self.cfg.max_tilt_distance
 
-        out_of_bounds = out_of_bounds | tilted
-
-        return out_of_bounds, time_out
+        return tilted, time_out
 
     def _reset_idx(self, env_ids: Sequence[int] | None):
         if env_ids is None:
@@ -149,16 +153,24 @@ class RocketEnv(DirectRLEnv):
         super()._reset_idx(env_ids)
 
         joint_pos = self.robot.data.default_joint_pos[env_ids]
-        joint_pos[:, self._pole_dof_idx] += sample_uniform(
-            self.cfg.initial_pole_angle_range[0] * math.pi,
-            self.cfg.initial_pole_angle_range[1] * math.pi,
-            joint_pos[:, self._pole_dof_idx].shape,
+        # Randomize all joint positions slightly
+        joint_pos[:, self._joint_ids] += sample_uniform(
+            self.cfg.initial_joint_range[0],
+            self.cfg.initial_joint_range[1],
+            joint_pos[:, self._joint_ids].shape,
             joint_pos.device,
         )
         joint_vel = self.robot.data.default_joint_vel[env_ids]
 
         default_root_state = self.robot.data.default_root_state[env_ids]
         default_root_state[:, :3] += self.scene.env_origins[env_ids]
+
+        # Randomize spawn height slightly
+        default_root_state[:, 2] += sample_uniform(
+            -0.05, 0.05,
+            (len(env_ids),),
+            default_root_state.device
+        )
 
         self.joint_pos[env_ids] = joint_pos
         self.joint_vel[env_ids] = joint_vel
@@ -167,34 +179,32 @@ class RocketEnv(DirectRLEnv):
         self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
 
+# =============================================================================
+# STANDING REWARD
+# =============================================================================
 
 @torch.jit.script
-def compute_rewards(
+def compute_standing_rewards(
     rew_scale_alive: float,
     rew_scale_terminated: float,
-    rew_scale_pole_pos: float,
-    rew_scale_cart_vel: float,
-    rew_scale_pole_vel: float,
     rew_scale_upright: float,
-    pole_pos: torch.Tensor,
-    pole_vel: torch.Tensor,
-    cart_pos: torch.Tensor,
-    cart_vel: torch.Tensor,
-    quat_w: torch.Tensor,
-    reset_terminated: torch.Tensor,
-):
-    rew_alive = rew_scale_alive * (1.0 - reset_terminated.float())
-    rew_termination = rew_scale_terminated * reset_terminated.float()
-    rew_pole_pos = rew_scale_pole_pos * torch.sum(
-        torch.square(pole_pos).unsqueeze(dim=1), dim=-1
-    )
-    rew_cart_vel = rew_scale_cart_vel * torch.sum(
-        torch.abs(cart_vel).unsqueeze(dim=1), dim=-1
-    )
-    rew_pole_vel = rew_scale_pole_vel * torch.sum(
-        torch.abs(pole_vel).unsqueeze(dim=1), dim=-1
-    )
+    rew_scale_joint_vel: float,
+    rew_scale_energy: float,
+    rew_scale_lin_vel: float,
+    quat_w: torch.Tensor,           # (N, 4)
+    root_lin_vel_w: torch.Tensor,   # (N, 3)
+    joint_vel: torch.Tensor,        # (N, 6)
+    actions: torch.Tensor,          # (N, 6)
+    reset_terminated: torch.Tensor, # (N,)
+) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
 
+    # --- Alive bonus ---
+    rew_alive = rew_scale_alive * (1.0 - reset_terminated.float())
+
+    # --- Termination penalty ---
+    rew_termination = rew_scale_terminated * reset_terminated.float()
+
+    # --- Upright reward ---
     # Distance from upright: rotate body z-axis [0,0,1] into world frame
     # using the IMU quaternion, then measure Euclidean distance to world up [0,0,1].
     # quat_w is (num_envs, 4) in (w, x, y, z) format.
@@ -219,7 +229,54 @@ def compute_rewards(
     )
     rew_upright = rew_scale_upright * upright_distance
 
+    # --- Root linear velocity penalty ---
+    # Penalises ALL root motion — vertical bounce, horizontal drift, everything.
+    # This is the primary anti-bounce term.
+    rew_lin_vel = rew_scale_lin_vel * torch.sum(torch.square(root_lin_vel_w), dim=-1)
+
+    # --- Joint velocity penalty ---
+    rew_joint_vel = rew_scale_joint_vel * torch.sum(torch.abs(joint_vel), dim=-1)
+
+    # --- Energy penalty ---
+    rew_energy = rew_scale_energy * torch.sum(torch.square(actions), dim=-1)
+
     total_reward = (
-        rew_alive + rew_termination + rew_pole_pos + rew_cart_vel + rew_pole_vel + rew_upright
+        rew_alive
+        + rew_termination
+        + rew_upright
+        + rew_lin_vel
+        + rew_joint_vel
+        + rew_energy
     )
-    return total_reward
+
+    components: dict[str, torch.Tensor] = {
+        "alive": rew_alive,
+        "termination": rew_termination,
+        "upright": rew_upright,
+        "lin_vel": rew_lin_vel,
+        "joint_vel": rew_joint_vel,
+        "energy": rew_energy,
+    }
+
+    return total_reward, components
+
+
+@torch.jit.script
+def compute_rewards(
+    rew_scale_alive: float,
+    rew_scale_terminated: float,
+    rew_scale_upright: float,
+    rew_scale_joint_vel: float,
+    rew_scale_energy: float,
+    rew_scale_lin_vel: float,
+    quat_w: torch.Tensor,
+    root_lin_vel_w: torch.Tensor,   # (N, 3)
+    joint_vel: torch.Tensor,
+    actions: torch.Tensor,
+    reset_terminated: torch.Tensor,
+) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    return compute_standing_rewards(
+        rew_scale_alive, rew_scale_terminated, rew_scale_upright, rew_scale_joint_vel, rew_scale_energy,
+        rew_scale_lin_vel, quat_w,
+        root_lin_vel_w, joint_vel, actions, reset_terminated,
+    )
