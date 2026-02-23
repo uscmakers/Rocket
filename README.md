@@ -1,3 +1,9 @@
+## Quick Navigation
+- [Template for Isaac Lab Projects](#template-for-isaac-lab-projects)
+- [Isaac Sim + Isaac Lab Quick Start (HPC)](#isaac-sim--isaac-lab-quick-start-hpc)
+- [Running Checkpoints on Roboland Isaac Sim](#running-checkpoints-on-roboland-isaac-sim)
+
+
 # Template for Isaac Lab Projects
 
 ## Overview
@@ -133,3 +139,114 @@ Some examples of packages that can likely be excluded are:
 "<path-to-isaac-sim>/extscache/omni.services.*"     // Services tools
 ...
 ```
+
+
+
+# Isaac Sim + Isaac Lab Quick Start (HPC)
+
+## Prerequisites (Satisfied by USC Carc)
+- Nvidia GPU required (RTX GPUs preferred for faster training)
+- Apptainer/Singularity available
+- No sudo needed
+
+## One-Time Setup
+
+SSH into the cluster and ensure you are in your home directory `home1/<usc_username>`:
+```bash
+ssh discovery
+pwd
+```
+
+### 1. Check and load Apptainer
+```bash
+module load apptainer
+apptainer --version
+```
+
+### 2. Pull Isaac Sim container
+```bash
+apptainer pull isaac-sim_5.1.0.sif docker://nvcr.io/nvidia/isaac-sim:5.1.0
+```
+
+### 3. Create cache directories
+```bash
+mkdir -p ~/isaac-sim-cache/{data,cache,logs}
+```
+
+### 4. Clone the Rocket repository
+```bash
+git clone https://github.com/uscmakers/Rocket.git
+cd Rocket
+```
+
+### 5. Create setup file for W&B credentials
+Create `setup.sh` in your home directory (`/home1/<username>/setup.sh`) if it does not already exist:
+```bash
+#!/bin/bash
+export WANDB_API_KEY="your_wandb_api_key"
+```
+
+Make it executable:
+```bash
+chmod +x ~/setup.sh
+```
+
+**Important:** Replace `your_wandb_api_key` with your Weights & Biases API key (get from https://wandb.ai/authorize).
+
+### 6. Configure SLURM account in train.sh (Optional)
+If you want to use a specific SLURM account, edit `train.sh` and uncomment/add this line:
+```bash
+#SBATCH --account=your_account_name
+```
+
+If commented out, your default SLURM account will be used. Check your accounts with: `sacctmgr show user $USER`
+
+**Note:** All pip packages (Isaac Lab, rl-games, etc.) are automatically installed by the sbatch script on first run and cached for future runs.
+
+## Running Training
+
+All sbatch scripts are located in the `Rocket` directory.
+
+### Submit Training Job
+```bash
+cd ~/Rocket
+sbatch train.sh
+```
+
+### Submit Evaluation/Play Job
+```bash
+cd ~/Rocket
+sbatch play.sh
+```
+
+### Customize Training/Evaluation
+Edit the shell scripts (`train.sh`, `play.sh`) to modify running scripts and flags.
+
+### Monitor Jobs
+```bash
+# View all your jobs
+squeue -u $USER
+
+# Quick view (alias myqueue to this if desired)
+squeue -u $USER -o "%.18i %.9P %.30j %.8T %.10M %.6D %R"
+
+# Check estimated start time for queued job
+squeue --start -j <jobid>
+
+# View job output (while running or after completion)
+tail -f jobs/rocket_<jobid>.out
+```
+
+### View Results
+Job outputs are saved to `jobs/rocket_<jobid>.out` and errors to `jobs/rocket_<jobid>.err`.
+
+## Key Rules
+- Always use `--nv` for GPU passthrough
+- Always bind the 3 cache directories
+- Use `/isaac-sim/python.sh` not `python`
+- **Always use `--headless` flag** on HPC - prevents GUI rendering (no display available, saves memory/CPU)
+- GPU required for running simulations
+- GPU NOT required for pip installs
+- sbatch scripts automatically install/update packages on each run, the sif container image is read-only
+
+# Running checkpoints on Roboland Isaac Sim
