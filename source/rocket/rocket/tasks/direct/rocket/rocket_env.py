@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from __future__ import annotations
+from typing import Dict, Tuple
 
 import torch
 from collections.abc import Sequence
@@ -38,6 +39,9 @@ class RocketEnv(DirectRLEnv):
         print("Resting height:", self.robot.data.root_pos_w[:, 2].mean().item())
         print(f"IMU position in world frame: {self.imu.data.pos_w.mean(dim=0)}")
         print(f"IMU orientation in world frame (quat): {self.imu.data.quat_w.mean(dim=0)}")
+
+        # Log dict for reward components and diagnostics
+        self.extras["log"] = {}
 
         if cfg.scene.tiled_camera is not None: 
             print("Scene setup complete with the following camera config: ", cfg.scene.tiled_camera)
@@ -89,7 +93,7 @@ class RocketEnv(DirectRLEnv):
         return observations
 
     def _get_rewards(self) -> torch.Tensor:
-        total_reward = compute_rewards(
+        total_reward, components = compute_rewards(
             rew_scale_alive=self.cfg.rew_scale_alive,
             rew_scale_terminated=self.cfg.rew_scale_terminated,
             rew_scale_upright=self.cfg.rew_scale_upright,
@@ -102,6 +106,10 @@ class RocketEnv(DirectRLEnv):
             actions=self.actions,
             reset_terminated=self.reset_terminated,
         )
+        
+        self.extras["log"].update({
+            f"rewards/{k}": v.mean().item() for k, v in components.items()
+        })
         return total_reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -188,7 +196,7 @@ def compute_standing_rewards(
     joint_vel: torch.Tensor,        # (N, 6)
     actions: torch.Tensor,          # (N, 6)
     reset_terminated: torch.Tensor, # (N,)
-) -> torch.Tensor:
+) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
 
     # --- Alive bonus ---
     rew_alive = rew_scale_alive * (1.0 - reset_terminated.float())
@@ -240,7 +248,17 @@ def compute_standing_rewards(
         + rew_joint_vel
         + rew_energy
     )
-    return total_reward
+
+    components: dict[str, torch.Tensor] = {
+        "alive": rew_alive,
+        "termination": rew_termination,
+        "upright": rew_upright,
+        "lin_vel": rew_lin_vel,
+        "joint_vel": rew_joint_vel,
+        "energy": rew_energy,
+    }
+
+    return total_reward, components
 
 
 @torch.jit.script
@@ -256,7 +274,7 @@ def compute_rewards(
     joint_vel: torch.Tensor,
     actions: torch.Tensor,
     reset_terminated: torch.Tensor,
-):
+) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
     return compute_standing_rewards(
         rew_scale_alive, rew_scale_terminated, rew_scale_upright, rew_scale_joint_vel, rew_scale_energy,
         rew_scale_lin_vel, quat_w,

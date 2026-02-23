@@ -60,6 +60,8 @@ import os
 import random
 import time
 import torch
+import numpy as np
+torch.serialization.add_safe_globals([np.core.multiarray.scalar])
 
 from rl_games.common import env_configurations, vecenv
 from rl_games.common.player import BasePlayer

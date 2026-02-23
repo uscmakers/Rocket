@@ -41,12 +41,19 @@ ROCKET_CFG = ArticulationCfg(
         joint_pos={"Revolute.*": 0.0},  # All joints start at 0
     ),
     actuators={
-        "legs": ImplicitActuatorCfg(
-            joint_names_expr=["Revolute.*"],  # Matches all 6 joints from URDF
-            effort_limit=10.0,
-            velocity_limit=100.0,
-            stiffness=0.0,
-            damping=0.5,
+        "servos": ImplicitActuatorCfg(
+            joint_names_expr=["Revolute1", "Revolute2"],
+            effort_limit=0.25,
+            velocity_limit=5.2,
+            stiffness=200.0,   # position-controlled: needs spring stiffness
+            damping=10.0,
+        ),
+        "steppers": ImplicitActuatorCfg(
+            joint_names_expr=["Revolute3", "Revolute4", "Revolute5", "Revolute6"],
+            effort_limit=3,
+            velocity_limit=6.2,
+            stiffness=200.0,    # torque/velocity-controlled: no spring
+            damping=10.0,
         ),
     },
 )
