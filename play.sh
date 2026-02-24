@@ -1,15 +1,40 @@
 #!/bin/bash
+#SBATCH --account=jessetho_1732
 #SBATCH --job-name=rocket-play
-#SBATCH --partition=gpu
+#SBATCH --partition=debug
 #SBATCH --gres=gpu:1
 #SBATCH --constraint="a100|a40|l40s"  # Exclude P100
 #SBATCH --mem=32G
-#SBATCH --time=1-00:00:00
+#SBATCH --time=30:00
 #SBATCH --output=jobs/rocket-play_%j.out
 #SBATCH --error=jobs/rocket-play_%j.err
 
 # Load any required modules (adjust based on your HPC)
 # module load apptainer  # Uncomment if needed
+
+# Check available accounts and fair share with sshare -l -U $USER
+
+# Dynamically extract the last checkpoint for the current standing policy
+source policies.cfg
+
+LOG_DIR="logs/rl_games/rocket_direct/$STANDING_POLICY_CHECKPOINT/nn"
+
+# default
+CHECKPOINT="$LOG_DIR/rocket_direct.pth"
+BEST_EPOCH=0
+
+# scan for epoch-stamped checkpoints
+for pth in "$LOG_DIR"/last_rocket_direct_ep_*.pth; do
+    [ -f "$pth" ] || continue
+    # extract epoch number from filename
+    epoch=$(echo "$pth" | grep -oP '(?<=_ep_)\d+')
+    if [ -n "$epoch" ] && [ "$epoch" -gt "$BEST_EPOCH" ]; then
+        BEST_EPOCH=$epoch
+        CHECKPOINT="$pth"
+    fi
+done
+
+echo "Using checkpoint: $CHECKPOINT"
 
 # Source user credentials from setup.sh
 if [ -f ~/setup.sh ]; then
@@ -22,10 +47,10 @@ fi
 # Set environment variables
 export ACCEPT_EULA=Y
 export PRIVACY_CONSENT=Y
+unset DISPLAY  # Ensure headless mode
+
 # Path to your SIF file (adjust this path!)
 SIF_PATH="$HOME/isaac-sim_5.1.0.sif"
-CHECKPOINT_NAME="2026-02-19_18-11-41"
-CHECKPOINT_PATH="$HOME/Rocket/logs/rl_games/rocket_direct/$CHECKPOINT_NAME/nn/rocket_direct.pth"
 
 # Run Isaac Sim with Apptainer
 module load apptainer
@@ -48,7 +73,7 @@ apptainer exec --nv \
     /isaac-sim/python.sh -m pip install --user rl-games &&
     /isaac-sim/python.sh -m pip install --user imageio imageio-ffmpeg &&
     /isaac-sim/python.sh -u scripts/list_envs.py &&
-    /isaac-sim/python.sh -u scripts/rl_games/play.py --headless --video --checkpoint "$CHECKPOINT_PATH"
+    /isaac-sim/python.sh -u scripts/rl_games/play.py --num_envs 32 --headless --video --checkpoint "$CHECKPOINT"
     "
 
 echo "Job completed"
