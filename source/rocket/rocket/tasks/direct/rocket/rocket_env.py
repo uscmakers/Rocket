@@ -49,7 +49,7 @@ class RocketEnv(DirectRLEnv):
         print(f"IMU orientation in world frame (quat): {self.imu.data.quat_w.mean(dim=0)}")
 
         # Print out camera config
-        if cfg.scene.tiled_camera is not None: 
+        if hasattr(cfg.scene, "tiled_camera"): 
             print("Scene setup complete with the following camera config: ", cfg.scene.tiled_camera)
 
 
