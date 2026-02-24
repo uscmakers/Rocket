@@ -35,14 +35,20 @@ class RocketEnv(DirectRLEnv):
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
 
-        # Extract root z-height for testing purposes
-        print("Resting height:", self.robot.data.root_pos_w[:, 2].mean().item())
-        print(f"IMU position in world frame: {self.imu.data.pos_w.mean(dim=0)}")
-        print(f"IMU orientation in world frame (quat): {self.imu.data.quat_w.mean(dim=0)}")
+        # Find joint limits for action normalization (actions * self.joint_pos_range + self.joint_pos_mid)
+        joint_limits = self.robot.data.soft_joint_pos_limits[:, self._joint_ids]  # (num_envs, num_joints, 2)
+        self.joint_pos_mid = (joint_limits[..., 0] + joint_limits[..., 1]) * 0.5
+        self.joint_pos_range = (joint_limits[..., 1] - joint_limits[..., 0]) * 0.5  # half-range as scale
 
         # Log dict for reward components and diagnostics
         self.extras["log"] = {}
 
+        # Print out root z-height for testing purposes
+        print("Resting height:", self.robot.data.root_pos_w[:, 2].mean().item())
+        print(f"IMU position in world frame: {self.imu.data.pos_w.mean(dim=0)}")
+        print(f"IMU orientation in world frame (quat): {self.imu.data.quat_w.mean(dim=0)}")
+
+        # Print out camera config
         if cfg.scene.tiled_camera is not None: 
             print("Scene setup complete with the following camera config: ", cfg.scene.tiled_camera)
 
@@ -69,10 +75,17 @@ class RocketEnv(DirectRLEnv):
         self.imu.update(dt=self.physics_dt)
 
     def _apply_action(self) -> None:
-        # Apply torques to all 6 joints
-        self.robot.set_joint_effort_target(
-            self.actions * self.cfg.action_scale, joint_ids=self._joint_ids
+        # actions are in [-1, 1] after tanh squashing in the policy head, so we scale and shift them according to joint ranges
+        target_joint_pos = self.joint_pos_mid + self.actions * self.joint_pos_range
+
+        # additional clamping to ensure we never exceed joint limits (optional)
+        target_joint_pos = target_joint_pos.clamp(
+            self.robot.data.soft_joint_pos_limits[:, self._joint_ids, 0],
+            self.robot.data.soft_joint_pos_limits[:, self._joint_ids, 1]
         )
+
+        # we control all joints in position control mode in isaac sim (delta pos in real life)
+        self.robot.set_joint_position_target(target_joint_pos, joint_ids=self._joint_ids)
 
     def _get_observations(self) -> dict:
         imu = self.imu.data
@@ -104,6 +117,7 @@ class RocketEnv(DirectRLEnv):
             root_lin_vel_w=self.robot.data.root_lin_vel_w[:, :3],
             joint_vel=self.joint_vel[:, self._joint_ids],
             actions=self.actions,
+            torques=self.robot.data.applied_torque[:, self._joint_ids],
             reset_terminated=self.reset_terminated,
         )
         
@@ -195,6 +209,7 @@ def compute_standing_rewards(
     root_lin_vel_w: torch.Tensor,   # (N, 3)
     joint_vel: torch.Tensor,        # (N, 6)
     actions: torch.Tensor,          # (N, 6)
+    torques: torch.Tensor,          # (N, 6)
     reset_terminated: torch.Tensor, # (N,)
 ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
 
@@ -238,7 +253,7 @@ def compute_standing_rewards(
     rew_joint_vel = rew_scale_joint_vel * torch.sum(torch.abs(joint_vel), dim=-1)
 
     # --- Energy penalty ---
-    rew_energy = rew_scale_energy * torch.sum(torch.square(actions), dim=-1)
+    rew_energy = rew_scale_energy * torch.sum(torch.square(torques), dim=-1)
 
     total_reward = (
         rew_alive
@@ -273,10 +288,11 @@ def compute_rewards(
     root_lin_vel_w: torch.Tensor,   # (N, 3)
     joint_vel: torch.Tensor,
     actions: torch.Tensor,
+    torques: torch.Tensor,
     reset_terminated: torch.Tensor,
 ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
     return compute_standing_rewards(
         rew_scale_alive, rew_scale_terminated, rew_scale_upright, rew_scale_joint_vel, rew_scale_energy,
         rew_scale_lin_vel, quat_w,
-        root_lin_vel_w, joint_vel, actions, reset_terminated,
+        root_lin_vel_w, joint_vel, actions, torques, reset_terminated,
     )

@@ -8,6 +8,7 @@
 """Launch Isaac Sim Simulator first."""
 
 import argparse
+import functools
 import sys
 
 from isaaclab.app import AppLauncher
@@ -61,7 +62,8 @@ import random
 import time
 import torch
 import numpy as np
-torch.serialization.add_safe_globals([np.core.multiarray.scalar])
+import functools
+torch.load = functools.partial(torch.load, weights_only=False)
 
 from rl_games.common import env_configurations, vecenv
 from rl_games.common.player import BasePlayer
@@ -213,7 +215,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             # convert obs to agent format
             obs = agent.obs_to_torch(obs)
             # agent stepping
-            actions = agent.get_action(obs, is_deterministic=agent.is_deterministic)
+            actions = agent.get_action(obs)
             # env stepping
             obs, _, dones, _ = env.step(actions)
 

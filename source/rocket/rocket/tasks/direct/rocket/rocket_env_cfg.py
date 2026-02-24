@@ -70,17 +70,17 @@ class RocketSceneCfg(InteractiveSceneCfg):
     # Camera for video recording - 45° angle view
     tiled_camera: TiledCameraCfg = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Camera",
-        update_period=0.0,  # Increase update period for video recording to reduce overhead and speed up training
+        update_period=0.0,
         offset=TiledCameraCfg.OffsetCfg(
-            pos=(0.5, 0.5, 0.5),  # 45° angle position
-            rot=(0.7071, 0.0, 0.0, 0.7071),  # Look down at robot (quaternion for -45° pitch)
+            pos=(2.0, 0.0, 1.5),  # 2m back, 1.5m up
+            rot=(0.9239, 0.0, 0.3827, 0.0),  # ~45° pitch down
             convention="world",
         ),
         data_types=["rgb"],
         spawn=sim_utils.PinholeCameraCfg(
-            focal_length=48.0,
-            focus_distance=400.0,
-            horizontal_aperture=21.0,
+            focal_length=24.0,      # shorter = wider FOV
+            focus_distance=1.0,     # focus on rocket ~1.0m away
+            horizontal_aperture=20.0,
             clipping_range=(0.1, 20.0),
         ),
         width=300,
@@ -114,9 +114,6 @@ class RocketEnvCfg(DirectRLEnvCfg):
     # robot joint names (from URDF)
     servo_joint_names = ["Revolute1", "Revolute2"]        # hip yaw (position-controlled servos)
     stepper_joint_names = ["Revolute3", "Revolute4", "Revolute5", "Revolute6"]  # hip roll + knee (steppers)
-
-    # action scale
-    action_scale = 10.0  # [Nm] torque multiplier
 
     # reward scales
     rew_scale_alive:         float =  2.0
