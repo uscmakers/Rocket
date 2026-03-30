@@ -1,10 +1,11 @@
 #!/bin/bash
+#SBATCH --account=biyik_1173
 #SBATCH --job-name=rocket-train
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
-#SBATCH --constraint="a40|l40s"
+#SBATCH --constraint="a40|l40s|a100"
 #SBATCH --mem=32G
-#SBATCH --time=1-00:00:00
+#SBATCH --time=12:00:00
 #SBATCH --output=jobs/rocket-train_%j.out
 #SBATCH --error=jobs/rocket-train_%j.err
 
@@ -27,11 +28,6 @@ SIF_PATH="$HOME/isaac-sim_5.1.0.sif"
 module load apptainer
 apptainer --version
 
-# Create/clear cache directories
-rm -rf ~/isaac-sim-cache/data
-rm -rf ~/isaac-sim-cache/cache
-rm -rf ~/isaac-sim-cache/logs
-
 mkdir -p ~/isaac-sim-cache/data
 mkdir -p ~/isaac-sim-cache/cache
 mkdir -p ~/isaac-sim-cache/logs
@@ -49,13 +45,14 @@ apptainer exec --nv \
     /isaac-sim/python.sh -m pip install --user imageio imageio-ffmpeg &&
     /isaac-sim/python.sh -u scripts/list_envs.py &&
     /isaac-sim/python.sh -u scripts/rl_games/train.py \
-        --max_iterations 1000 \
+        --max_iterations 100000 \
         --headless \
         --video \
         --track \
         --wandb-entity 'rocket-babysitters' \
         --wandb-project-name 'rocket' \
-        --wandb-name 'standing'
+        --wandb-name 'walking' \
+        --walking
     "
 
 echo "Job completed"

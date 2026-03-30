@@ -42,6 +42,9 @@ parser.add_argument(
     help="if toggled, this experiment will be tracked with Weights and Biases",
 )
 parser.add_argument("--export_io_descriptors", action="store_true", default=False, help="Export IO descriptors.")
+policy_group = parser.add_mutually_exclusive_group()
+policy_group.add_argument("--standing", action="store_true", default=False, help="Train standing policy (default).")
+policy_group.add_argument("--walking", action="store_true", default=False, help="Train walking policy.")
 parser.add_argument(
     "--ray-proc-id", "-rid", type=int, default=None, help="Automatically configured by Ray integration, otherwise None."
 )
@@ -103,6 +106,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # override configurations with non-hydra CLI arguments
     env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
     env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
+
+    # set policy type from --standing / --walking flags (default: standing)
+    if args_cli.walking:
+        env_cfg.policy_type = "walking"
+    else:
+        env_cfg.policy_type = "standing"
 
     # remove camera configs if enable cameras is not enabled
     if not args_cli.enable_cameras and hasattr(env_cfg.scene, "tiled_camera"):

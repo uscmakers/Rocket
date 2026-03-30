@@ -100,8 +100,8 @@ class RocketEnvCfg(DirectRLEnvCfg):
 
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1 / 120, 
-        render_interval=decimation, 
+        dt=1 / 120,
+        render_interval=decimation,
         # device="cuda" if torch.cuda.is_available() else "cpu",
     )
 
@@ -113,17 +113,55 @@ class RocketEnvCfg(DirectRLEnvCfg):
 
     # robot joint names (from URDF)
     servo_joint_names = ["Revolute1", "Revolute2"]        # hip yaw (position-controlled servos)
-    stepper_joint_names = ["Revolute3", "Revolute4", "Revolute5", "Revolute6"]  # hip roll + knee (steppers)
+    hip_joint_names = ["Revolute3", "Revolute4"]          # hip roll (velocity-controlled steppers)
+    knee_joint_names = ["Revolute5", "Revolute6"]         # knee (velocity-controlled steppers)
+    stepper_joint_names = hip_joint_names + knee_joint_names  # hip roll + knee (steppers)
 
-    # reward scales
-    rew_scale_alive:         float =  2.0
-    rew_scale_terminated:    float = -5.0
-    rew_scale_upright:       float =  2.0 
-    rew_scale_joint_vel:     float = -0.1
-    rew_scale_energy:        float = -0.1
-    rew_scale_lin_vel:       float = -0.5
+    # target standing pose (for reward calculation)
+    # initialize this at runtime so it can be set to the joint pos limits taken from robot.data
+    target_standing_pose = ()
 
-    # reset/termination conditions
+    # policy type: "standing" or "walking"
+    # determines which reward function and scales are used
+    policy_type: str = "standing"
+
+    # reward scales - defaults match standing policy
+    rew_scale_alive: float = 5.0
+    rew_scale_terminated: float = -5.0
+    rew_scale_upright: float = 2.0
+    rew_scale_joint_vel: float = -0.05
+    rew_scale_torque: float = -0.1
+    rew_scale_lin_vel: float = -0.05
+    rew_scale_target_standing_pose: float = 1.0
+    rew_scale_height: float = 1.0
+
+    # reward scale presets (applied at env init based on policy_type)
+    standing_reward_scales = {
+        "rew_scale_alive":                5.0,
+        "rew_scale_terminated":          -5.0,
+        "rew_scale_upright":              2.0,
+        "rew_scale_joint_vel":           -0.05,
+        "rew_scale_torque":              -0.1,
+        "rew_scale_lin_vel":             -0.05,
+        "rew_scale_target_standing_pose": 2.0,
+        "rew_scale_height":               2.0,
+    }
+
+    walking_reward_scales = {
+        "rew_scale_alive":                5.0,
+        "rew_scale_terminated":          -5.0,
+        "rew_scale_upright":              1.0,
+        "rew_scale_joint_vel":           -0.05,
+        "rew_scale_torque":              -0.05,
+        "rew_scale_lin_vel":              3.0,   # positive = reward forward x-velocity
+        "rew_scale_target_standing_pose": 0.1,   # light posture encouragement
+        "rew_scale_height":               2.0,   # stay off the ground
+    }
+
+    # additional conditions
     initial_joint_range = [-0.1, 0.1]  # joint angle randomization on reset [rad]
+    target_height = 0.14 # at about 0.12 m, the robot is sitting
+
+    # termination conditions
     max_tilt_distance = 0.75  # max tilt before termination
-    min_height: float = 0.1  # min height before termination [m]
+    min_height: float = 0.10  # min height before termination [m] (currently unused)

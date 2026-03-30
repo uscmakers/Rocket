@@ -24,6 +24,16 @@ class RocketEnv(DirectRLEnv):
     cfg: RocketEnvCfg
 
     def __init__(self, cfg: RocketEnvCfg, render_mode: str | None = None, **kwargs):
+        # Apply policy-type reward scales before the env is fully initialised
+        self.policy_type = cfg.policy_type
+        if self.policy_type == "walking":
+            for k, v in cfg.walking_reward_scales.items():
+                setattr(cfg, k, v)
+        else:
+            for k, v in cfg.standing_reward_scales.items():
+                setattr(cfg, k, v)
+        print(f"[RocketEnv] Policy type: {self.policy_type}")
+
         super().__init__(cfg, render_mode, **kwargs)
 
         # Find joint indices by group
@@ -40,6 +50,12 @@ class RocketEnv(DirectRLEnv):
         self.joint_pos_mid = (joint_limits[..., 0] + joint_limits[..., 1]) * 0.5
         self.joint_pos_range = (joint_limits[..., 1] - joint_limits[..., 0]) * 0.5  # half-range as scale
 
+        # Calculate the target standing pose (servos should be at 0 degrees, steppers should be at their negative limit to rep 45 deg limit)
+        target_pos = torch.zeros(1, len(self._joint_ids), device=self.device)
+        # stepper_indices = [self._joint_ids.index(j) for j in self._stepper_joint_ids]
+        # target_pos[:, stepper_indices] = self.robot.data.soft_joint_pos_limits[:1, self._stepper_joint_ids, 0]
+        self.target_standing_pose = target_pos  # (1, num_joints) broadcasts over envs
+
         # Log dict for reward components and diagnostics
         self.extras["log"] = {}
 
@@ -47,6 +63,9 @@ class RocketEnv(DirectRLEnv):
         print("Resting height:", self.robot.data.root_pos_w[:, 2].mean().item())
         print(f"IMU position in world frame: {self.imu.data.pos_w.mean(dim=0)}")
         print(f"IMU orientation in world frame (quat): {self.imu.data.quat_w.mean(dim=0)}")
+
+        # Print out target standing pose for testing purposes
+        print("Target standing pose (joint positions):", self.target_standing_pose)
 
         # Print out camera config
         if hasattr(cfg.scene, "tiled_camera"): 
@@ -106,20 +125,29 @@ class RocketEnv(DirectRLEnv):
         return observations
 
     def _get_rewards(self) -> torch.Tensor:
-        total_reward, components = compute_rewards(
+        reward_kwargs = dict(
             rew_scale_alive=self.cfg.rew_scale_alive,
             rew_scale_terminated=self.cfg.rew_scale_terminated,
             rew_scale_upright=self.cfg.rew_scale_upright,
+            rew_scale_target_standing_pose=self.cfg.rew_scale_target_standing_pose,
             rew_scale_joint_vel=self.cfg.rew_scale_joint_vel,
-            rew_scale_energy=self.cfg.rew_scale_energy,
+            rew_scale_torque=self.cfg.rew_scale_torque,
             rew_scale_lin_vel=self.cfg.rew_scale_lin_vel,
+            rew_scale_height=self.cfg.rew_scale_height,
             quat_w=self.imu.data.quat_w,
             root_lin_vel_w=self.robot.data.root_lin_vel_w[:, :3],
+            joint_pos=self.joint_pos[:, self._joint_ids],
             joint_vel=self.joint_vel[:, self._joint_ids],
             actions=self.actions,
             torques=self.robot.data.applied_torque[:, self._joint_ids],
             reset_terminated=self.reset_terminated,
+            target_standing_pose=self.target_standing_pose,
+            z_height=self.robot.data.root_pos_w[:, 2],
         )
+        if self.policy_type == "walking":
+            total_reward, components = compute_walking_rewards(**reward_kwargs)
+        else:
+            total_reward, components = compute_standing_rewards(**reward_kwargs)
         
         self.extras["log"].update({
             f"rewards/{k}": v.mean().item() for k, v in components.items()
@@ -202,15 +230,20 @@ def compute_standing_rewards(
     rew_scale_alive: float,
     rew_scale_terminated: float,
     rew_scale_upright: float,
+    rew_scale_target_standing_pose: float,
     rew_scale_joint_vel: float,
-    rew_scale_energy: float,
+    rew_scale_torque: float,
     rew_scale_lin_vel: float,
+    rew_scale_height: float,
     quat_w: torch.Tensor,           # (N, 4)
     root_lin_vel_w: torch.Tensor,   # (N, 3)
+    joint_pos: torch.Tensor,        # (N, 6)
     joint_vel: torch.Tensor,        # (N, 6)
     actions: torch.Tensor,          # (N, 6)
     torques: torch.Tensor,          # (N, 6)
     reset_terminated: torch.Tensor, # (N,)
+    target_standing_pose: torch.Tensor,  # (N, 6)
+    z_height: torch.Tensor, # (N, 1)
 ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
 
     # --- Alive bonus ---
@@ -242,7 +275,21 @@ def compute_standing_rewards(
         + body_z_world_y * body_z_world_y
         + (body_z_world_z - 1.0) * (body_z_world_z - 1.0)
     )
-    rew_upright = rew_scale_upright * upright_distance
+    rew_upright = rew_scale_upright * torch.exp(-upright_distance)
+
+    # --- Reward for being close to or at target standing pose ---
+    pose_error = torch.sqrt(torch.sum(torch.square(
+        joint_pos - target_standing_pose
+    ), dim=-1))
+    rew_target_standing_pose = rew_scale_target_standing_pose * torch.exp(-pose_error)
+
+    # For debugging purposes, log the pose error per joint type (hip yaw, hip roll, knee)
+    hip_yaw_pose_error = torch.abs(joint_pos[:, 0:2] - target_standing_pose[:, 0:2]).mean(dim=-1)
+    hip_roll_pose_error = torch.abs(joint_pos[:, 2:4] - target_standing_pose[:, 2:4]).mean(dim=-1)
+    knee_pose_error = torch.abs(joint_pos[:, 4:6] - target_standing_pose[:, 4:6]).mean(dim=-1)
+
+    # Height Reward
+    rew_height = rew_scale_height * z_height
 
     # --- Root linear velocity penalty ---
     # Penalises ALL root motion — vertical bounce, horizontal drift, everything.
@@ -252,8 +299,8 @@ def compute_standing_rewards(
     # --- Joint velocity penalty ---
     rew_joint_vel = rew_scale_joint_vel * torch.sum(torch.abs(joint_vel), dim=-1)
 
-    # --- Energy penalty ---
-    rew_energy = rew_scale_energy * torch.sum(torch.square(torques), dim=-1)
+    # --- Torque penalty ---
+    rew_torque = rew_scale_torque * torch.sum(torch.square(torques), dim=-1)
 
     total_reward = (
         rew_alive
@@ -261,7 +308,9 @@ def compute_standing_rewards(
         + rew_upright
         + rew_lin_vel
         + rew_joint_vel
-        + rew_energy
+        + rew_torque
+        + rew_target_standing_pose
+        + rew_height
     )
 
     components: dict[str, torch.Tensor] = {
@@ -270,29 +319,101 @@ def compute_standing_rewards(
         "upright": rew_upright,
         "lin_vel": rew_lin_vel,
         "joint_vel": rew_joint_vel,
-        "energy": rew_energy,
+        "torque": rew_torque,
+        "target_standing_pose": rew_target_standing_pose,
+        "hip_yaw_pose_error": hip_yaw_pose_error,
+        "hip_roll_pose_error": hip_roll_pose_error,
+        "knee_pose_error": knee_pose_error.mean(dim=-1),
+        "height": rew_height,
     }
 
     return total_reward, components
 
 
 @torch.jit.script
-def compute_rewards(
+def compute_walking_rewards(
     rew_scale_alive: float,
     rew_scale_terminated: float,
     rew_scale_upright: float,
+    rew_scale_target_standing_pose: float,
     rew_scale_joint_vel: float,
-    rew_scale_energy: float,
+    rew_scale_torque: float,
     rew_scale_lin_vel: float,
-    quat_w: torch.Tensor,
+    rew_scale_height: float,
+    quat_w: torch.Tensor,           # (N, 4)
     root_lin_vel_w: torch.Tensor,   # (N, 3)
-    joint_vel: torch.Tensor,
-    actions: torch.Tensor,
-    torques: torch.Tensor,
-    reset_terminated: torch.Tensor,
+    joint_pos: torch.Tensor,        # (N, 6)
+    joint_vel: torch.Tensor,        # (N, 6)
+    actions: torch.Tensor,          # (N, 6)
+    torques: torch.Tensor,          # (N, 6)
+    reset_terminated: torch.Tensor, # (N,)
+    target_standing_pose: torch.Tensor,  # (N, 6)
+    z_height: torch.Tensor,         # (N,)
 ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-    return compute_standing_rewards(
-        rew_scale_alive, rew_scale_terminated, rew_scale_upright, rew_scale_joint_vel, rew_scale_energy,
-        rew_scale_lin_vel, quat_w,
-        root_lin_vel_w, joint_vel, actions, torques, reset_terminated,
+
+    # --- Alive bonus ---
+    rew_alive = rew_scale_alive * (1.0 - reset_terminated.float())
+
+    # --- Termination penalty ---
+    rew_termination = rew_scale_terminated * reset_terminated.float()
+
+    # --- Upright reward (same as standing) ---
+    qw = quat_w[:, 0]
+    qx = quat_w[:, 1]
+    qy = quat_w[:, 2]
+    qz = quat_w[:, 3]
+    body_z_world_x = 2.0 * (qx * qz + qw * qy)
+    body_z_world_y = 2.0 * (qy * qz - qw * qx)
+    body_z_world_z = 1.0 - 2.0 * (qx * qx + qy * qy)
+    upright_distance = torch.sqrt(
+        body_z_world_x * body_z_world_x
+        + body_z_world_y * body_z_world_y
+        + (body_z_world_z - 1.0) * (body_z_world_z - 1.0)
     )
+    rew_upright = rew_scale_upright * torch.exp(-upright_distance)
+
+    # --- Forward velocity reward (x-axis) ---
+    # rew_scale_lin_vel is positive for walking: reward forward (x) movement.
+    # Penalise lateral (y) drift with a fixed small coefficient.
+    forward_vel = root_lin_vel_w[:, 0]
+    lateral_vel = root_lin_vel_w[:, 1]
+    rew_lin_vel = rew_scale_lin_vel * forward_vel - 0.5 * torch.square(lateral_vel)
+
+    # --- Height reward ---
+    rew_height = rew_scale_height * z_height
+
+    # --- Light posture encouragement ---
+    pose_error = torch.sqrt(torch.sum(torch.square(joint_pos - target_standing_pose), dim=-1))
+    rew_target_standing_pose = rew_scale_target_standing_pose * torch.exp(-pose_error)
+
+    # --- Joint velocity penalty ---
+    rew_joint_vel = rew_scale_joint_vel * torch.sum(torch.abs(joint_vel), dim=-1)
+
+    # --- Torque penalty ---
+    rew_torque = rew_scale_torque * torch.sum(torch.square(torques), dim=-1)
+
+    total_reward = (
+        rew_alive
+        + rew_termination
+        + rew_upright
+        + rew_lin_vel
+        + rew_height
+        + rew_target_standing_pose
+        + rew_joint_vel
+        + rew_torque
+    )
+
+    components: dict[str, torch.Tensor] = {
+        "alive": rew_alive,
+        "termination": rew_termination,
+        "upright": rew_upright,
+        "lin_vel": rew_lin_vel,
+        "forward_vel": forward_vel,
+        "lateral_vel": lateral_vel,
+        "height": rew_height,
+        "target_standing_pose": rew_target_standing_pose,
+        "joint_vel": rew_joint_vel,
+        "torque": rew_torque,
+    }
+
+    return total_reward, components
