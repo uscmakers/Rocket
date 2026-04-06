@@ -9,59 +9,68 @@
 #SBATCH --output=jobs/rocket-play_%j.out
 #SBATCH --error=jobs/rocket-play_%j.err
 
-# Load any required modules (adjust based on your HPC)
-# module load apptainer  # Uncomment if needed
-
-# Check available accounts and fair share with sshare -l -U $USER
-
-# Dynamically extract the last checkpoint for the current standing policy
+# Usage: ./play.sh --standing | --walking
 source policies.cfg
 
-LOG_DIR="logs/rl_games/rocket_direct/$STANDING_POLICY_CHECKPOINT/nn"
+# Parse policy type argument
+case "$1" in
+    --standing)
+        RUN_DIR="$STANDING_POLICY_CHECKPOINT"
+        CHECKPOINT_FILE="$STANDING_POLICY_CHECKPOINT_FILE"
+        ;;
+    --walking)
+        RUN_DIR="$WALKING_POLICY_CHECKPOINT"
+        CHECKPOINT_FILE="$WALKING_POLICY_CHECKPOINT_FILE"
+        ;;
+    *)
+        echo "Usage: $0 --standing | --walking"
+        exit 1
+        ;;
+esac
 
-# default
+# Resolve checkpoint path
+LOG_DIR="logs/rl_games/rocket_direct/$RUN_DIR/nn"
 CHECKPOINT="$LOG_DIR/rocket_direct.pth"
-BEST_EPOCH=0
 
-# scan for epoch-stamped checkpoints
-for pth in "$LOG_DIR"/last_rocket_direct_ep_*.pth; do
-    [ -f "$pth" ] || continue
-    # extract epoch number from filename
-    epoch=$(echo "$pth" | grep -oP '(?<=_ep_)\d+')
-    if [ -n "$epoch" ] && [ "$epoch" -gt "$BEST_EPOCH" ]; then
-        BEST_EPOCH=$epoch
-        CHECKPOINT="$pth"
-    fi
-done
+if [ -n "$CHECKPOINT_FILE" ] && [ "$CHECKPOINT_FILE" != "none" ]; then
+    CHECKPOINT="$LOG_DIR/$CHECKPOINT_FILE"
+else
+    # Auto-select the highest epoch checkpoint
+    BEST_EPOCH=0
+    for pth in "$LOG_DIR"/last_rocket_direct_ep_*.pth; do
+        [ -f "$pth" ] || continue
+        epoch=$(echo "$pth" | grep -oP '(?<=_ep_)\d+')
+        if [ -n "$epoch" ] && [ "$epoch" -gt "$BEST_EPOCH" ]; then
+            BEST_EPOCH=$epoch
+            CHECKPOINT="$pth"
+        fi
+    done
+fi
 
-echo "Using checkpoint: $CHECKPOINT"
+echo "Policy:     $1"
+echo "Checkpoint: $CHECKPOINT"
 
-# Source user credentials from setup.sh
+# Source user credentials
 if [ -f ~/setup.sh ]; then
     source ~/setup.sh
 else
     echo "ERROR: ~/setup.sh not found!"
-    echo "Create ~/setup.sh with your credentials to log runs to wandb"
+    exit 1
 fi
 
-# Set environment variables
+# Environment
 export ACCEPT_EULA=Y
 export PRIVACY_CONSENT=Y
-unset DISPLAY  # Ensure headless mode
+unset DISPLAY
 
-# Path to your SIF file (adjust this path!)
 SIF_PATH="$HOME/isaac-sim_5.1.0.sif"
 
-# Run Isaac Sim with Apptainer
 module load apptainer
-apptainer --version
 
-# Create cache directories (ESSENTIAL)
 mkdir -p ~/isaac-sim-cache/data
 mkdir -p ~/isaac-sim-cache/cache
 mkdir -p ~/isaac-sim-cache/logs
 
-# Run your script with necessary binds
 apptainer exec --nv \
     --bind ~/isaac-sim-cache/data:/isaac-sim/kit/data \
     --bind ~/isaac-sim-cache/cache:/isaac-sim/kit/cache \

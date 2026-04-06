@@ -4,7 +4,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from __future__ import annotations
-from typing import Dict, Tuple
 
 import torch
 from collections.abc import Sequence
@@ -15,9 +14,10 @@ from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import sample_uniform, quat_apply, quat_inv
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import ImuCfg
+from isaaclab.sensors import ImuCfg, ContactSensor
 
 from .rocket_env_cfg import RocketEnvCfg
+from .rewards import compute_standing_rewards, compute_walking_rewards
 
 
 class RocketEnv(DirectRLEnv):
@@ -41,6 +41,8 @@ class RocketEnv(DirectRLEnv):
         self._stepper_joint_ids, _ = self.robot.find_joints(self.cfg.stepper_joint_names)
         self._joint_ids = self._servo_joint_ids + self._stepper_joint_ids
         self.imu = self.scene["imu"]
+        self.contact_sensor_calves: ContactSensor = self.scene["contact_sensor_calves"]
+        self.contact_sensor_toes: ContactSensor = self.scene["contact_sensor_toes"]
 
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
@@ -134,6 +136,7 @@ class RocketEnv(DirectRLEnv):
             rew_scale_torque=self.cfg.rew_scale_torque,
             rew_scale_lin_vel=self.cfg.rew_scale_lin_vel,
             rew_scale_height=self.cfg.rew_scale_height,
+            rew_scale_toe_walking=self.cfg.rew_scale_toe_walking,
             quat_w=self.imu.data.quat_w,
             root_lin_vel_w=self.robot.data.root_lin_vel_w[:, :3],
             joint_pos=self.joint_pos[:, self._joint_ids],
@@ -143,12 +146,14 @@ class RocketEnv(DirectRLEnv):
             reset_terminated=self.reset_terminated,
             target_standing_pose=self.target_standing_pose,
             z_height=self.robot.data.root_pos_w[:, 2],
+            calf_forces=self.contact_sensor_calves.data.net_forces_w,
+            toe_forces=self.contact_sensor_toes.data.net_forces_w,
         )
         if self.policy_type == "walking":
             total_reward, components = compute_walking_rewards(**reward_kwargs)
         else:
             total_reward, components = compute_standing_rewards(**reward_kwargs)
-        
+
         self.extras["log"].update({
             f"rewards/{k}": v.mean().item() for k, v in components.items()
         })
@@ -220,200 +225,3 @@ class RocketEnv(DirectRLEnv):
         self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
         self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
-
-# =============================================================================
-# STANDING REWARD
-# =============================================================================
-
-@torch.jit.script
-def compute_standing_rewards(
-    rew_scale_alive: float,
-    rew_scale_terminated: float,
-    rew_scale_upright: float,
-    rew_scale_target_standing_pose: float,
-    rew_scale_joint_vel: float,
-    rew_scale_torque: float,
-    rew_scale_lin_vel: float,
-    rew_scale_height: float,
-    quat_w: torch.Tensor,           # (N, 4)
-    root_lin_vel_w: torch.Tensor,   # (N, 3)
-    joint_pos: torch.Tensor,        # (N, 6)
-    joint_vel: torch.Tensor,        # (N, 6)
-    actions: torch.Tensor,          # (N, 6)
-    torques: torch.Tensor,          # (N, 6)
-    reset_terminated: torch.Tensor, # (N,)
-    target_standing_pose: torch.Tensor,  # (N, 6)
-    z_height: torch.Tensor, # (N, 1)
-) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-
-    # --- Alive bonus ---
-    rew_alive = rew_scale_alive * (1.0 - reset_terminated.float())
-
-    # --- Termination penalty ---
-    rew_termination = rew_scale_terminated * reset_terminated.float()
-
-    # --- Upright reward ---
-    # Distance from upright: rotate body z-axis [0,0,1] into world frame
-    # using the IMU quaternion, then measure Euclidean distance to world up [0,0,1].
-    # quat_w is (num_envs, 4) in (w, x, y, z) format.
-    #
-    # For a quaternion q = (w, x, y, z), rotating v = [0,0,1]:
-    #   rotated_x = 2*(x*z + w*y)
-    #   rotated_y = 2*(y*z - w*x)
-    #   rotated_z = 1 - 2*(x^2 + y^2)
-    qw = quat_w[:, 0]
-    qx = quat_w[:, 1]
-    qy = quat_w[:, 2]
-    qz = quat_w[:, 3]
-    body_z_world_x = 2.0 * (qx * qz + qw * qy)
-    body_z_world_y = 2.0 * (qy * qz - qw * qx)
-    body_z_world_z = 1.0 - 2.0 * (qx * qx + qy * qy)
-
-    # Euclidean distance to world up [0, 0, 1]
-    upright_distance = torch.sqrt(
-        body_z_world_x * body_z_world_x
-        + body_z_world_y * body_z_world_y
-        + (body_z_world_z - 1.0) * (body_z_world_z - 1.0)
-    )
-    rew_upright = rew_scale_upright * torch.exp(-upright_distance)
-
-    # --- Reward for being close to or at target standing pose ---
-    pose_error = torch.sqrt(torch.sum(torch.square(
-        joint_pos - target_standing_pose
-    ), dim=-1))
-    rew_target_standing_pose = rew_scale_target_standing_pose * torch.exp(-pose_error)
-
-    # For debugging purposes, log the pose error per joint type (hip yaw, hip roll, knee)
-    hip_yaw_pose_error = torch.abs(joint_pos[:, 0:2] - target_standing_pose[:, 0:2]).mean(dim=-1)
-    hip_roll_pose_error = torch.abs(joint_pos[:, 2:4] - target_standing_pose[:, 2:4]).mean(dim=-1)
-    knee_pose_error = torch.abs(joint_pos[:, 4:6] - target_standing_pose[:, 4:6]).mean(dim=-1)
-
-    # Height Reward
-    rew_height = rew_scale_height * z_height
-
-    # --- Root linear velocity penalty ---
-    # Penalises ALL root motion — vertical bounce, horizontal drift, everything.
-    # This is the primary anti-bounce term.
-    rew_lin_vel = rew_scale_lin_vel * torch.sum(torch.square(root_lin_vel_w), dim=-1)
-
-    # --- Joint velocity penalty ---
-    rew_joint_vel = rew_scale_joint_vel * torch.sum(torch.abs(joint_vel), dim=-1)
-
-    # --- Torque penalty ---
-    rew_torque = rew_scale_torque * torch.sum(torch.square(torques), dim=-1)
-
-    total_reward = (
-        rew_alive
-        + rew_termination
-        + rew_upright
-        + rew_lin_vel
-        + rew_joint_vel
-        + rew_torque
-        + rew_target_standing_pose
-        + rew_height
-    )
-
-    components: dict[str, torch.Tensor] = {
-        "alive": rew_alive,
-        "termination": rew_termination,
-        "upright": rew_upright,
-        "lin_vel": rew_lin_vel,
-        "joint_vel": rew_joint_vel,
-        "torque": rew_torque,
-        "target_standing_pose": rew_target_standing_pose,
-        "hip_yaw_pose_error": hip_yaw_pose_error,
-        "hip_roll_pose_error": hip_roll_pose_error,
-        "knee_pose_error": knee_pose_error.mean(dim=-1),
-        "height": rew_height,
-    }
-
-    return total_reward, components
-
-
-@torch.jit.script
-def compute_walking_rewards(
-    rew_scale_alive: float,
-    rew_scale_terminated: float,
-    rew_scale_upright: float,
-    rew_scale_target_standing_pose: float,
-    rew_scale_joint_vel: float,
-    rew_scale_torque: float,
-    rew_scale_lin_vel: float,
-    rew_scale_height: float,
-    quat_w: torch.Tensor,           # (N, 4)
-    root_lin_vel_w: torch.Tensor,   # (N, 3)
-    joint_pos: torch.Tensor,        # (N, 6)
-    joint_vel: torch.Tensor,        # (N, 6)
-    actions: torch.Tensor,          # (N, 6)
-    torques: torch.Tensor,          # (N, 6)
-    reset_terminated: torch.Tensor, # (N,)
-    target_standing_pose: torch.Tensor,  # (N, 6)
-    z_height: torch.Tensor,         # (N,)
-) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-
-    # --- Alive bonus ---
-    rew_alive = rew_scale_alive * (1.0 - reset_terminated.float())
-
-    # --- Termination penalty ---
-    rew_termination = rew_scale_terminated * reset_terminated.float()
-
-    # --- Upright reward (same as standing) ---
-    qw = quat_w[:, 0]
-    qx = quat_w[:, 1]
-    qy = quat_w[:, 2]
-    qz = quat_w[:, 3]
-    body_z_world_x = 2.0 * (qx * qz + qw * qy)
-    body_z_world_y = 2.0 * (qy * qz - qw * qx)
-    body_z_world_z = 1.0 - 2.0 * (qx * qx + qy * qy)
-    upright_distance = torch.sqrt(
-        body_z_world_x * body_z_world_x
-        + body_z_world_y * body_z_world_y
-        + (body_z_world_z - 1.0) * (body_z_world_z - 1.0)
-    )
-    rew_upright = rew_scale_upright * torch.exp(-upright_distance)
-
-    # --- Forward velocity reward (x-axis) ---
-    # rew_scale_lin_vel is positive for walking: reward forward (x) movement.
-    # Penalise lateral (y) drift with a fixed small coefficient.
-    forward_vel = root_lin_vel_w[:, 0]
-    lateral_vel = root_lin_vel_w[:, 1]
-    rew_lin_vel = rew_scale_lin_vel * forward_vel - 0.5 * torch.square(lateral_vel)
-
-    # --- Height reward ---
-    rew_height = rew_scale_height * z_height
-
-    # --- Light posture encouragement ---
-    pose_error = torch.sqrt(torch.sum(torch.square(joint_pos - target_standing_pose), dim=-1))
-    rew_target_standing_pose = rew_scale_target_standing_pose * torch.exp(-pose_error)
-
-    # --- Joint velocity penalty ---
-    rew_joint_vel = rew_scale_joint_vel * torch.sum(torch.abs(joint_vel), dim=-1)
-
-    # --- Torque penalty ---
-    rew_torque = rew_scale_torque * torch.sum(torch.square(torques), dim=-1)
-
-    total_reward = (
-        rew_alive
-        + rew_termination
-        + rew_upright
-        + rew_lin_vel
-        + rew_height
-        + rew_target_standing_pose
-        + rew_joint_vel
-        + rew_torque
-    )
-
-    components: dict[str, torch.Tensor] = {
-        "alive": rew_alive,
-        "termination": rew_termination,
-        "upright": rew_upright,
-        "lin_vel": rew_lin_vel,
-        "forward_vel": forward_vel,
-        "lateral_vel": lateral_vel,
-        "height": rew_height,
-        "target_standing_pose": rew_target_standing_pose,
-        "joint_vel": rew_joint_vel,
-        "torque": rew_torque,
-    }
-
-    return total_reward, components

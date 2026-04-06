@@ -1,0 +1,203 @@
+<?xml version="1.0" ?>
+<robot name="Rocket">
+
+  <material name="silver">
+    <color rgba="0.700 0.700 0.700 1.000"/>
+  </material>
+
+  <link name="Torso_Assy_1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.5096"/>
+      <inertia ixx="0.001794" iyy="0.003277" izz="0.001952" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Torso_Assy_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Torso_Assy_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="Revolute1" type="revolute">
+    <origin xyz="-0.066 0 0.113" rpy="0 0 0"/>
+    <parent link="Torso_Assy_1"/>
+    <child link="Hip_Assy_L_1"/>
+    <axis xyz="0 0 1"/>
+    <limit upper="0.2618" lower="-0.2618" effort="1000" velocity="100"/>
+  </joint>
+
+  <link name="Hip_Assy_L_1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0175"/>
+      <inertia ixx="0.000592" iyy="0.001156" izz="0.001114" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.066 0 -0.113" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Hip_Assy_L_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.066 0 -0.113" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Hip_Assy_L_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="Revolute2" type="revolute">
+    <origin xyz="0.066 0 0.113" rpy="0 0 0"/>
+    <parent link="Torso_Assy_1"/>
+    <child link="Hip_Assy_R_1"/>
+    <axis xyz="0 0 1"/>
+    <limit upper="0.2618" lower="-0.2618" effort="1000" velocity="100"/>
+  </joint>
+
+  <link name="Hip_Assy_R_1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0176"/>
+      <inertia ixx="0.000592" iyy="0.001156" izz="0.001114" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.066 0 -0.113" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Hip_Assy_R_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.066 0 -0.113" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Hip_Assy_R_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="Revolute3" type="revolute">
+    <origin xyz="-0.0491 0 -0.043" rpy="0 0 0"/>
+    <parent link="Hip_Assy_L_1"/>
+    <child link="Thigh_Assy_L_1"/>
+    <axis xyz="1 0 0"/>
+    <limit upper="0.1745" lower="-0.1745" effort="1000" velocity="100"/>
+  </joint>
+
+  <link name="Thigh_Assy_L_1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.2254"/>
+      <inertia ixx="0.002582" iyy="0.001994" izz="0.001962" ixy="-0.000302" iyz="0.000789" ixz="0.000307"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.1151 0 -0.07" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Thigh_Assy_L_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.1151 0 -0.07" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Thigh_Assy_L_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="Revolute4" type="revolute">
+    <origin xyz="0.0491 0 -0.043" rpy="0 0 0"/>
+    <parent link="Hip_Assy_R_1"/>
+    <child link="Thigh_Assy_R_1"/>
+    <axis xyz="1 0 0"/>
+    <limit upper="0.1745" lower="-0.1745" effort="1000" velocity="100"/>
+  </joint>
+
+  <link name="Thigh_Assy_R_1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.2254"/>
+      <inertia ixx="0.002582" iyy="0.001994" izz="0.001962" ixy="0.000302" iyz="0.000789" ixz="-0.000307"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.1151 0 -0.07" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Thigh_Assy_R_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.1151 0 -0.07" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Thigh_Assy_R_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="Revolute5" type="revolute">
+    <origin xyz="-0.0488 0.099 -0.099" rpy="0 0 0"/>
+    <parent link="Thigh_Assy_L_1"/>
+    <child link="Calf_Assy_L_1"/>
+    <axis xyz="-1 0 0"/>
+    <limit upper="0.1745" lower="-0.1745" effort="1000" velocity="100"/>
+  </joint>
+
+  <link name="Calf_Assy_L_1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.1220"/>
+      <inertia ixx="0.000542" iyy="0.000325" izz="0.000375" ixy="0.000015" iyz="-0.000243" ixz="0.000012"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.1639 -0.099 0.029" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Calf_Assy_L_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.1639 -0.099 0.029" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Calf_Assy_L_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="Revolute6" type="revolute">
+    <origin xyz="0.0488 0.099 -0.099" rpy="0 0 0"/>
+    <parent link="Thigh_Assy_R_1"/>
+    <child link="Calf_Assy_R_1"/>
+    <axis xyz="-1 0 0"/>
+    <limit upper="0.1745" lower="-0.1745" effort="1000" velocity="100"/>
+  </joint>
+
+  <link name="Calf_Assy_R_1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.1220"/>
+      <inertia ixx="0.000542" iyy="0.000325" izz="0.000375" ixy="-0.000015" iyz="-0.000243" ixz="-0.000012"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.1639 -0.099 0.029" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Calf_Assy_R_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.1639 -0.099 0.029" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://meshes/Calf_Assy_R_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+</robot>

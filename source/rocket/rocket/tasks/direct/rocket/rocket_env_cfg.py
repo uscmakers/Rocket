@@ -10,7 +10,7 @@ from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg, UrdfConverterCfg
 from isaaclab.utils import configclass
-from isaaclab.sensors import ImuCfg, TiledCameraCfg
+from isaaclab.sensors import ImuCfg, TiledCameraCfg, ContactSensorCfg
 
 import torch
 import math
@@ -29,6 +29,8 @@ ROCKET_CFG = ArticulationCfg(
     spawn=sim_utils.UrdfFileCfg(
         asset_path=URDF_PATH,
         fix_base=False,
+        activate_contact_sensors=True,
+        merge_fixed_joints=False,
         joint_drive=UrdfConverterCfg.JointDriveCfg(
             gains=UrdfConverterCfg.JointDriveCfg.PDGainsCfg(
                 stiffness=0.0,
@@ -48,11 +50,18 @@ ROCKET_CFG = ArticulationCfg(
             stiffness=200.0,   # position-controlled: needs spring stiffness
             damping=10.0,
         ),
-        "steppers": ImplicitActuatorCfg(
-            joint_names_expr=["Revolute3", "Revolute4", "Revolute5", "Revolute6"],
+        "hip_steppers": ImplicitActuatorCfg(
+            joint_names_expr=["Revolute3", "Revolute4"],
             effort_limit=3,
             velocity_limit=6.2,
-            stiffness=200.0,    # torque/velocity-controlled: no spring
+            stiffness=200.0,
+            damping=10.0,
+        ),
+        "knee_steppers": ImplicitActuatorCfg(
+            joint_names_expr=["Revolute5", "Revolute6"],
+            effort_limit=6,
+            velocity_limit=6.2,
+            stiffness=200.0,
             damping=10.0,
         ),
     },
@@ -61,10 +70,27 @@ ROCKET_CFG = ArticulationCfg(
 @configclass
 class RocketSceneCfg(InteractiveSceneCfg):
     imu: ImuCfg = ImuCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/Torso_Assy_1",  # Updated to match URDF base link
+        prim_path="{ENV_REGEX_NS}/Robot/Torso_1",
         update_period=0.0,  # every step
         history_length=1,
         debug_vis=True,
+        # Torso mesh bottom is at Z=0 in link frame (center XY=0,0).
+        # Place IMU 1 inch (0.0254 m) above bottom, centered in XY.
+        offset=ImuCfg.OffsetCfg(pos=(0.0, 0.0, 0.0254)),
+    )
+
+    contact_sensor_calves: ContactSensorCfg = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/Calf_.*_1",
+        update_period=0.0,
+        history_length=1,
+        track_air_time=False,
+    )
+
+    contact_sensor_toes: ContactSensorCfg = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/Toe_.*_1",
+        update_period=0.0,
+        history_length=1,
+        track_air_time=False,
     )
 
     # Camera for video recording - 45° angle view
@@ -134,6 +160,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
     rew_scale_lin_vel: float = -0.05
     rew_scale_target_standing_pose: float = 1.0
     rew_scale_height: float = 1.0
+    rew_scale_toe_walking: float = 1.0  # reward toe ground contact, penalize calf ground contact
 
     # reward scale presets (applied at env init based on policy_type)
     standing_reward_scales = {
@@ -145,17 +172,19 @@ class RocketEnvCfg(DirectRLEnvCfg):
         "rew_scale_lin_vel":             -0.05,
         "rew_scale_target_standing_pose": 2.0,
         "rew_scale_height":               2.0,
+        "rew_scale_toe_walking":          1.0,
     }
 
     walking_reward_scales = {
         "rew_scale_alive":                5.0,
         "rew_scale_terminated":          -5.0,
-        "rew_scale_upright":              1.0,
+        "rew_scale_upright":              3.0,
         "rew_scale_joint_vel":           -0.05,
         "rew_scale_torque":              -0.05,
         "rew_scale_lin_vel":              3.0,   # positive = reward forward x-velocity
         "rew_scale_target_standing_pose": 0.1,   # light posture encouragement
         "rew_scale_height":               2.0,   # stay off the ground
+        "rew_scale_toe_walking":          1.0,
     }
 
     # additional conditions
