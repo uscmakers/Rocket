@@ -9,24 +9,34 @@
 #SBATCH --output=jobs/rocket-play_%j.out
 #SBATCH --error=jobs/rocket-play_%j.err
 
-# Usage: ./play.sh --standing | --walking
+# Usage: ./play.sh --standing | --walking [--roboland]
 source policies.cfg
 
-# Parse policy type argument
-case "$1" in
-    --standing)
-        RUN_DIR="$STANDING_POLICY_CHECKPOINT"
-        CHECKPOINT_FILE="$STANDING_POLICY_CHECKPOINT_FILE"
-        ;;
-    --walking)
-        RUN_DIR="$WALKING_POLICY_CHECKPOINT"
-        CHECKPOINT_FILE="$WALKING_POLICY_CHECKPOINT_FILE"
-        ;;
-    *)
-        echo "Usage: $0 --standing | --walking"
-        exit 1
-        ;;
-esac
+# Parse arguments
+POLICY=""
+ROBOLAND=false
+for arg in "$@"; do
+    case "$arg" in
+        --standing) POLICY="standing" ;;
+        --walking)  POLICY="walking" ;;
+        --roboland) ROBOLAND=true ;;
+        *) echo "Unknown argument: $arg"; echo "Usage: $0 --standing | --walking [--roboland]"; exit 1 ;;
+    esac
+done
+
+if [ -z "$POLICY" ]; then
+    echo "Usage: $0 --standing | --walking [--roboland]"
+    exit 1
+fi
+
+# Select run dir and checkpoint file based on policy
+if [ "$POLICY" = "standing" ]; then
+    RUN_DIR="$STANDING_POLICY_CHECKPOINT"
+    CHECKPOINT_FILE="$STANDING_POLICY_CHECKPOINT_FILE"
+else
+    RUN_DIR="$WALKING_POLICY_CHECKPOINT"
+    CHECKPOINT_FILE="$WALKING_POLICY_CHECKPOINT_FILE"
+fi
 
 # Resolve checkpoint path
 LOG_DIR="logs/rl_games/rocket_direct/$RUN_DIR/nn"
@@ -47,42 +57,49 @@ else
     done
 fi
 
-echo "Policy:     $1"
+echo "Policy:     --$POLICY"
 echo "Checkpoint: $CHECKPOINT"
 
 # Source user credentials
 if [ -f ~/setup.sh ]; then
     source ~/setup.sh
 else
-    echo "ERROR: ~/setup.sh not found!"
-    exit 1
+    echo "WARNING: ~/setup.sh not found! Credentials will not be loaded"
 fi
 
-# Environment
-export ACCEPT_EULA=Y
-export PRIVACY_CONSENT=Y
-unset DISPLAY
+if [ "$ROBOLAND" = true ]; then
+    # Run locally with custom conda/venv environment
+    source ~/env_isaaclab/bin/activate
+    python3 -u scripts/rl_games/play.py \
+        --checkpoint "$CHECKPOINT" \
+        --num_envs 1
+else
+    # Run on HPC via Apptainer
+    export ACCEPT_EULA=Y
+    export PRIVACY_CONSENT=Y
+    unset DISPLAY
 
-SIF_PATH="$HOME/isaac-sim_5.1.0.sif"
+    SIF_PATH="$HOME/isaac-sim_5.1.0.sif"
 
-module load apptainer
+    module load apptainer
 
-mkdir -p ~/isaac-sim-cache/data
-mkdir -p ~/isaac-sim-cache/cache
-mkdir -p ~/isaac-sim-cache/logs
+    mkdir -p ~/isaac-sim-cache/data
+    mkdir -p ~/isaac-sim-cache/cache
+    mkdir -p ~/isaac-sim-cache/logs
 
-apptainer exec --nv \
-    --bind ~/isaac-sim-cache/data:/isaac-sim/kit/data \
-    --bind ~/isaac-sim-cache/cache:/isaac-sim/kit/cache \
-    --bind ~/isaac-sim-cache/logs:/isaac-sim/kit/logs \
-    $SIF_PATH \
-    bash -c "
-    /isaac-sim/python.sh -m pip install --user --no-build-isolation "isaaclab[all]==2.3.2" --extra-index-url https://pypi.nvidia.com &&
-    /isaac-sim/python.sh -m pip install --user --force-reinstall -e source/rocket &&
-    /isaac-sim/python.sh -m pip install --user rl-games &&
-    /isaac-sim/python.sh -m pip install --user imageio imageio-ffmpeg &&
-    /isaac-sim/python.sh -u scripts/list_envs.py &&
-    /isaac-sim/python.sh -u scripts/rl_games/play.py --num_envs 32 --headless --video --checkpoint "$CHECKPOINT"
-    "
+    apptainer exec --nv \
+        --bind ~/isaac-sim-cache/data:/isaac-sim/kit/data \
+        --bind ~/isaac-sim-cache/cache:/isaac-sim/kit/cache \
+        --bind ~/isaac-sim-cache/logs:/isaac-sim/kit/logs \
+        $SIF_PATH \
+        bash -c "
+        /isaac-sim/python.sh -m pip install --user --no-build-isolation "isaaclab[all]==2.3.2" --extra-index-url https://pypi.nvidia.com &&
+        /isaac-sim/python.sh -m pip install --user --force-reinstall -e source/rocket &&
+        /isaac-sim/python.sh -m pip install --user rl-games &&
+        /isaac-sim/python.sh -m pip install --user imageio imageio-ffmpeg &&
+        /isaac-sim/python.sh -u scripts/list_envs.py &&
+        /isaac-sim/python.sh -u scripts/rl_games/play.py --num_envs 32 --headless --video --checkpoint "$CHECKPOINT"
+        "
+fi
 
 echo "Job completed"
