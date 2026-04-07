@@ -49,17 +49,6 @@ if [ -n "$CHECKPOINT_EPOCH" ] && [ "$CHECKPOINT_EPOCH" != "none" ]; then
         echo "ERROR: No checkpoint found for epoch $CHECKPOINT_EPOCH in $LOG_DIR"
         exit 1
     fi
-else
-    # Auto-select the highest epoch checkpoint
-    BEST_EPOCH=0
-    for pth in "$LOG_DIR"/last_rocket_direct_ep_*.pth; do
-        [ -f "$pth" ] || continue
-        epoch=$(echo "$pth" | grep -oP '(?<=_ep_)\d+')
-        if [ -n "$epoch" ] && [ "$epoch" -gt "$BEST_EPOCH" ]; then
-            BEST_EPOCH=$epoch
-            CHECKPOINT="$pth"
-        fi
-    done
 fi
 
 echo "Policy:     --$POLICY"
