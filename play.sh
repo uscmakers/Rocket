@@ -29,21 +29,26 @@ if [ -z "$POLICY" ]; then
     exit 1
 fi
 
-# Select run dir and checkpoint file based on policy
+# Select run dir and checkpoint epoch based on policy
 if [ "$POLICY" = "standing" ]; then
     RUN_DIR="$STANDING_POLICY_CHECKPOINT"
-    CHECKPOINT_FILE="$STANDING_POLICY_CHECKPOINT_FILE"
+    CHECKPOINT_EPOCH="$STANDING_POLICY_CHECKPOINT_EPOCH"
 else
     RUN_DIR="$WALKING_POLICY_CHECKPOINT"
-    CHECKPOINT_FILE="$WALKING_POLICY_CHECKPOINT_FILE"
+    CHECKPOINT_EPOCH="$WALKING_POLICY_CHECKPOINT_EPOCH"
 fi
 
 # Resolve checkpoint path
 LOG_DIR="logs/rl_games/rocket_direct/$RUN_DIR/nn"
 CHECKPOINT="$LOG_DIR/rocket_direct.pth"
 
-if [ -n "$CHECKPOINT_FILE" ] && [ "$CHECKPOINT_FILE" != "none" ]; then
-    CHECKPOINT="$LOG_DIR/$CHECKPOINT_FILE"
+if [ -n "$CHECKPOINT_EPOCH" ] && [ "$CHECKPOINT_EPOCH" != "none" ]; then
+    # Find the file matching last_rocket_direct_ep_{epoch}_*.pth
+    CHECKPOINT=$(ls "$LOG_DIR"/last_rocket_direct_ep_${CHECKPOINT_EPOCH}_*.pth 2>/dev/null | head -1)
+    if [ -z "$CHECKPOINT" ]; then
+        echo "ERROR: No checkpoint found for epoch $CHECKPOINT_EPOCH in $LOG_DIR"
+        exit 1
+    fi
 else
     # Auto-select the highest epoch checkpoint
     BEST_EPOCH=0
