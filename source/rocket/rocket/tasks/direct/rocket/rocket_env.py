@@ -153,6 +153,7 @@ class RocketEnv(DirectRLEnv):
             rew_scale_height=self.cfg.rew_scale_height,
             rew_scale_toe_walking=self.cfg.rew_scale_toe_walking,
             rew_scale_action_rate=self.cfg.rew_scale_action_rate,
+            rew_scale_vertical_vel=self.cfg.rew_scale_vertical_vel,
             quat_w=self.imu.data.quat_w,
             root_lin_vel_w=self.robot.data.root_lin_vel_w[:, :3],
             joint_pos=self.joint_pos[:, self._joint_ids],
