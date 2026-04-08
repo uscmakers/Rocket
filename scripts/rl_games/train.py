@@ -99,6 +99,7 @@ logger = logging.getLogger(__name__)
 
 import rocket.tasks  # noqa: F401
 
+from exporter import export_trained_policy_to_onnx
 
 @hydra_task_config(args_cli.task, args_cli.agent)
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
@@ -267,6 +268,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # close the simulator
     env.close()
+
+    # Export final policy as ONNX
+    export_trained_policy_to_onnx(log_root_path, log_dir, config_name, agent_cfg)
 
 
 if __name__ == "__main__":
