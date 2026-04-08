@@ -167,12 +167,12 @@ class RocketEnvCfg(DirectRLEnvCfg):
     standing_reward_scales = {
         "rew_scale_alive":                5.0,
         "rew_scale_terminated":          -5.0,
-        "rew_scale_upright":              2.0,
-        "rew_scale_joint_vel":           -0.0,
+        "rew_scale_upright":              3.0,
+        "rew_scale_joint_vel":           -1.0,
         "rew_scale_torque":              -0.0,
-        "rew_scale_lin_vel":             -0.05, # FIXME: this penalizes velocity in all directions, naming is inconsistent with walking rewards. Create a RewardScale object to store these scalars instead
+        "rew_scale_lin_vel":             -3.0, # FIXME: this penalizes velocity in all directions, naming is inconsistent with walking rewards. Create a RewardScale object to store these scalars instead
         "rew_scale_lat_vel":              0.0,
-        "rew_scale_target_standing_pose": 1.0,
+        "rew_scale_target_standing_pose": 2.0,
         "rew_scale_height":               0.0,
         "rew_scale_toe_walking":          3.0,
     }
