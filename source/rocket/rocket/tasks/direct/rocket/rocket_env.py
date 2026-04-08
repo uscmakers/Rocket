@@ -58,6 +58,8 @@ class RocketEnv(DirectRLEnv):
         # target_pos[:, stepper_indices] = self.robot.data.soft_joint_pos_limits[:1, self._stepper_joint_ids, 0]
         self.target_standing_pose = target_pos  # (1, num_joints) broadcasts over envs
 
+        self.prev_actions = torch.zeros(self.num_envs, self.cfg.action_space, device=self.device)
+
         # Log dict for reward components and diagnostics
         self.extras["log"] = {}
 
@@ -118,6 +120,7 @@ class RocketEnv(DirectRLEnv):
 
         # we control all joints in position control mode in isaac sim (delta pos in real life)
         self.robot.set_joint_position_target(target_joint_pos, joint_ids=self._joint_ids)
+        self.prev_actions[:] = self.actions
 
     def _get_observations(self) -> dict:
         imu = self.imu.data
@@ -149,11 +152,13 @@ class RocketEnv(DirectRLEnv):
             rew_scale_lat_vel=self.cfg.rew_scale_lat_vel,
             rew_scale_height=self.cfg.rew_scale_height,
             rew_scale_toe_walking=self.cfg.rew_scale_toe_walking,
+            rew_scale_action_rate=self.cfg.rew_scale_action_rate,
             quat_w=self.imu.data.quat_w,
             root_lin_vel_w=self.robot.data.root_lin_vel_w[:, :3],
             joint_pos=self.joint_pos[:, self._joint_ids],
             joint_vel=self.joint_vel[:, self._joint_ids],
             actions=self.actions,
+            prev_actions=self.prev_actions,
             torques=self.robot.data.applied_torque[:, self._joint_ids],
             reset_terminated=self.reset_terminated,
             target_standing_pose=self.target_standing_pose,
@@ -236,6 +241,7 @@ class RocketEnv(DirectRLEnv):
 
         self.joint_pos[env_ids] = joint_pos
         self.joint_vel[env_ids] = joint_vel
+        self.prev_actions[env_ids] = 0.0
 
         self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
         self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
