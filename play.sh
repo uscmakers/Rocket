@@ -80,12 +80,7 @@ else
     if [ -f "$CHECKPOINT_ARG" ]; then
         CHECKPOINT="$CHECKPOINT_ARG"
     else
-        # Otherwise assume it is a run directory or nn directory
-        if [ -d "$CHECKPOINT_ARG/nn" ]; then
-            LOG_DIR="$CHECKPOINT_ARG/nn"
-        elif [ -d "$CHECKPOINT_ARG" ]; then
-            LOG_DIR="$CHECKPOINT_ARG"
-        fi
+        LOG_DIR="logs/rl_games/rocket_direct/$RUN_DIR/nn"
     fi
 fi
 
