@@ -31,16 +31,20 @@ else
     echo "WARNING: ~/setup.sh not found! Credentials will not be loaded"
 fi
 
-TRAIN_ARGS="--max_iterations 1000 --headless --video --track \
-    --wandb-entity 'rocket-babysitters' \
-    --wandb-project-name 'rocket' \
-    --wandb-name '$POLICY' \
-    --$POLICY"
+TRAIN_ARGS=(
+    --max_iterations 1000
+    --headless
+    --track
+    --wandb-entity rocket-babysitters 
+    --wandb-project-name rocket
+    --wandb-name "$POLICY"
+    --"$POLICY"
+)
 
 if [ "$ROBOLAND" = true ]; then
     # Run locally with custom conda/venv environment
     source ~/env_isaaclab/bin/activate
-    python3 -u scripts/rl_games/train.py $TRAIN_ARGS
+    python3 -u scripts/rl_games/train.py "${TRAIN_ARGS[@]}"
 else
     # Set environment variables
     export ACCEPT_EULA=Y
