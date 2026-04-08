@@ -17,7 +17,7 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ImuCfg, ContactSensor
 
 from .rocket_env_cfg import RocketEnvCfg
-from .rewards import compute_standing_rewards, compute_walking_rewards
+from .rewards import compute_standing_rewards, compute_walking_rewards, rew_toe_walking_debug
 
 
 class RocketEnv(DirectRLEnv):
@@ -69,8 +69,19 @@ class RocketEnv(DirectRLEnv):
         # Print out target standing pose for testing purposes
         print("Target standing pose (joint positions):", self.target_standing_pose)
 
+        # --- Contact sensor diagnostics ---
+        # net_forces_w shape: (num_envs, num_bodies, 3)
+        # num_bodies must be 2 (one per leg) for the toe-walking reward to work correctly.
+        calf_shape = self.contact_sensor_calves.data.net_forces_w.shape
+        toe_shape  = self.contact_sensor_toes.data.net_forces_w.shape
+        print(f"[ContactSensor] calves net_forces_w shape: {calf_shape}  (expect: num_envs x 2 x 3)")
+        print(f"[ContactSensor] toes  net_forces_w shape: {toe_shape}   (expect: num_envs x 2 x 3)")
+        if hasattr(self.contact_sensor_calves, "body_names"):
+            print(f"[ContactSensor] calf bodies tracked: {self.contact_sensor_calves.body_names}")
+            print(f"[ContactSensor] toe  bodies tracked: {self.contact_sensor_toes.body_names}")
+
         # Print out camera config
-        if hasattr(cfg.scene, "tiled_camera"): 
+        if hasattr(cfg.scene, "tiled_camera"):
             print("Scene setup complete with the following camera config: ", cfg.scene.tiled_camera)
 
 
@@ -135,6 +146,7 @@ class RocketEnv(DirectRLEnv):
             rew_scale_joint_vel=self.cfg.rew_scale_joint_vel,
             rew_scale_torque=self.cfg.rew_scale_torque,
             rew_scale_lin_vel=self.cfg.rew_scale_lin_vel,
+            rew_scale_lat_vel=self.cfg.rew_scale_lat_vel,
             rew_scale_height=self.cfg.rew_scale_height,
             rew_scale_toe_walking=self.cfg.rew_scale_toe_walking,
             quat_w=self.imu.data.quat_w,
@@ -149,6 +161,8 @@ class RocketEnv(DirectRLEnv):
             calf_forces=self.contact_sensor_calves.data.net_forces_w,
             toe_forces=self.contact_sensor_toes.data.net_forces_w,
         )
+        rew_toe_walking_debug(reward_kwargs["calf_forces"], reward_kwargs["toe_forces"])
+
         if self.policy_type == "walking":
             total_reward, components = compute_walking_rewards(**reward_kwargs)
         else:
@@ -157,6 +171,7 @@ class RocketEnv(DirectRLEnv):
         self.extras["log"].update({
             f"rewards/{k}": v.mean().item() for k, v in components.items()
         })
+
         return total_reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:

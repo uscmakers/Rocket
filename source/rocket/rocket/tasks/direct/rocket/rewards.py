@@ -36,6 +36,19 @@ def rew_upright(quat_w: torch.Tensor) -> torch.Tensor:
     return torch.exp(-distance)
 
 
+def rew_toe_walking_debug(
+    calf_forces: torch.Tensor,  # (N, 2, 3)
+    toe_forces: torch.Tensor,   # (N, 2, 3)
+) -> torch.Tensor:
+    """Debug (non-jit) version of rew_toe_walking — prints per-leg force magnitudes."""
+    calf_mag = torch.norm(calf_forces, dim=-1)  # (N, 2)
+    toe_mag  = torch.norm(toe_forces,  dim=-1)  # (N, 2)
+    print(f"[toe_walking_debug] calf_mag (L, R): {calf_mag[0].tolist()}")
+    print(f"[toe_walking_debug]  toe_mag (L, R): {toe_mag[0].tolist()}")
+    print(f"[toe_walking_debug]  per_leg score : {(toe_mag - calf_mag)[0].tolist()}")
+    return (toe_mag - calf_mag).sum(dim=-1)
+
+
 @torch.jit.script
 def rew_toe_walking(
     calf_forces: torch.Tensor,  # (N, 2, 3)
@@ -45,9 +58,11 @@ def rew_toe_walking(
 
     Returns (N,) in [-2, +2]; positive = good (toe contact), negative = bad (calf contact).
     """
-    calf_contact = (torch.norm(calf_forces, dim=-1) > 1.0).float().sum(dim=-1)
-    toe_contact  = (torch.norm(toe_forces,  dim=-1) > 1.0).float().sum(dim=-1)
-    return toe_contact - calf_contact
+    calf_mag = torch.norm(calf_forces, dim=-1)  # (N, 2)
+    toe_mag  = torch.norm(toe_forces,  dim=-1)  # (N, 2)
+    return (toe_mag - calf_mag).sum(dim=-1)
+
+
 
 
 @torch.jit.script
@@ -72,10 +87,43 @@ def rew_torque_penalty(torques: torch.Tensor) -> torch.Tensor:
     return torch.sum(torch.square(torques), dim=-1)
 
 
+# @torch.jit.script
+# def rew_lin_vel_penalty(root_lin_vel_w: torch.Tensor) -> torch.Tensor:
+#     """Sum of squared root linear velocity (all axes). Returns (N,); caller applies negative scale."""
+#     return torch.sum(torch.square(root_lin_vel_w), dim=-1)
+
+
 @torch.jit.script
-def rew_lin_vel_penalty(root_lin_vel_w: torch.Tensor) -> torch.Tensor:
-    """Sum of squared root linear velocity (all axes). Returns (N,); caller applies negative scale."""
-    return torch.sum(torch.square(root_lin_vel_w), dim=-1)
+def rew_heading_vel(
+    quat_w: torch.Tensor,          # (N, 4) in (w, x, y, z)
+    root_lin_vel_w: torch.Tensor,  # (N, 3)
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Decompose root velocity into the robot's heading frame.
+
+    The robot's body +x axis in world frame is the first column of the
+    rotation matrix built from quat_w.  We project it to the horizontal
+    plane and renormalize so pitch doesn't bleed into the forward signal.
+
+    Returns:
+        forward_vel: (N,)  velocity along the robot's facing direction
+        lateral_vel: (N,)  velocity perpendicular to heading (left = positive)
+    """
+    qw = quat_w[:, 0]; qx = quat_w[:, 1]; qy = quat_w[:, 2]; qz = quat_w[:, 3]
+
+    # Body +x in world frame, projected to horizontal plane
+    fwd_x = 1.0 - 2.0 * (qy * qy + qz * qz)
+    fwd_y = 2.0 * (qx * qy + qw * qz)
+    fwd_norm = torch.sqrt(fwd_x * fwd_x + fwd_y * fwd_y).clamp(min=1e-6)
+    fwd_x = fwd_x / fwd_norm  # unit 2-D heading
+    fwd_y = fwd_y / fwd_norm
+
+    vel_x = root_lin_vel_w[:, 0]
+    vel_y = root_lin_vel_w[:, 1]
+
+    forward_vel = vel_x * fwd_x + vel_y * fwd_y   # dot with heading
+    lateral_vel = -vel_x * fwd_y + vel_y * fwd_x  # dot with ⊥ heading
+
+    return forward_vel, lateral_vel
 
 
 # =============================================================================
@@ -91,6 +139,7 @@ def compute_standing_rewards(
     rew_scale_joint_vel: float,
     rew_scale_torque: float,
     rew_scale_lin_vel: float,
+    rew_scale_lat_vel: float,
     rew_scale_height: float,
     rew_scale_toe_walking: float,
     quat_w: torch.Tensor,                # (N, 4)
@@ -111,11 +160,14 @@ def compute_standing_rewards(
     rew_terminated = rew_scale_terminated * reset_terminated.float()
     rew_up         = rew_scale_upright    * rew_upright(quat_w)
     rew_height_r   = rew_scale_height     * z_height
-    rew_lin_vel    = rew_scale_lin_vel    * rew_lin_vel_penalty(root_lin_vel_w)
     rew_jvel       = rew_scale_joint_vel  * rew_joint_vel_penalty(joint_vel)
     rew_torque_r   = rew_scale_torque     * rew_torque_penalty(torques)
     rew_pose_r     = rew_scale_target_standing_pose * rew_pose(joint_pos, target_standing_pose)
     rew_toe_r      = rew_scale_toe_walking * rew_toe_walking(calf_forces, toe_forces)
+
+    # Penalize any linear velocity (negative scale); direction doesn't matter for standing
+    forward_vel, lateral_vel = rew_heading_vel(quat_w, root_lin_vel_w)
+    rew_lin_vel = rew_scale_lin_vel * torch.norm(root_lin_vel_w, dim=-1)
 
     # Per-joint-group pose error for diagnostics
     hip_yaw_pose_error  = torch.abs(joint_pos[:, 0:2] - target_standing_pose[:, 0:2]).mean(dim=-1)
@@ -132,6 +184,8 @@ def compute_standing_rewards(
         "termination":          rew_terminated,
         "upright":              rew_up,
         "lin_vel":              rew_lin_vel,
+        "forward_vel":          forward_vel,
+        "lateral_vel":          lateral_vel,
         "joint_vel":            rew_jvel,
         "torque":               rew_torque_r,
         "target_standing_pose": rew_pose_r,
@@ -158,6 +212,7 @@ def compute_walking_rewards(
     rew_scale_joint_vel: float,
     rew_scale_torque: float,
     rew_scale_lin_vel: float,
+    rew_scale_lat_vel: float,
     rew_scale_height: float,
     rew_scale_toe_walking: float,
     quat_w: torch.Tensor,                # (N, 4)
@@ -183,10 +238,9 @@ def compute_walking_rewards(
     rew_pose_r     = rew_scale_target_standing_pose * rew_pose(joint_pos, target_standing_pose)
     rew_toe_r      = rew_scale_toe_walking * rew_toe_walking(calf_forces, toe_forces)
 
-    # Forward reward + lateral penalty (walking-specific lin_vel logic)
-    forward_vel  = root_lin_vel_w[:, 0]
-    lateral_vel  = root_lin_vel_w[:, 1]
-    rew_lin_vel  = rew_scale_lin_vel * forward_vel - 0.5 * torch.square(lateral_vel)
+    # Forward reward + lateral penalty in the robot's heading frame
+    forward_vel, lateral_vel = rew_heading_vel(quat_w, root_lin_vel_w)
+    rew_lin_vel = rew_scale_lin_vel * forward_vel + rew_scale_lat_vel * torch.square(lateral_vel)
 
     total_reward = (
         rew_alive + rew_terminated + rew_up + rew_lin_vel

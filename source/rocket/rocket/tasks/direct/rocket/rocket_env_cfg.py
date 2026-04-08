@@ -158,6 +158,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
     rew_scale_joint_vel: float = -0.05
     rew_scale_torque: float = -0.1
     rew_scale_lin_vel: float = -0.05
+    rew_scale_lat_vel: float = 0.0
     rew_scale_target_standing_pose: float = 1.0
     rew_scale_height: float = 1.0
     rew_scale_toe_walking: float = 1.0  # reward toe ground contact, penalize calf ground contact
@@ -167,24 +168,26 @@ class RocketEnvCfg(DirectRLEnvCfg):
         "rew_scale_alive":                5.0,
         "rew_scale_terminated":          -5.0,
         "rew_scale_upright":              2.0,
-        "rew_scale_joint_vel":           -0.05,
-        "rew_scale_torque":              -0.1,
-        "rew_scale_lin_vel":             -0.05,
-        "rew_scale_target_standing_pose": 2.0,
-        "rew_scale_height":               2.0,
-        "rew_scale_toe_walking":          1.0,
+        "rew_scale_joint_vel":           -0.0,
+        "rew_scale_torque":              -0.0,
+        "rew_scale_lin_vel":             -0.05, # FIXME: this penalizes velocity in all directions, naming is inconsistent with walking rewards. Create a RewardScale object to store these scalars instead
+        "rew_scale_lat_vel":              0.0,
+        "rew_scale_target_standing_pose": 1.0,
+        "rew_scale_height":               0.0,
+        "rew_scale_toe_walking":          3.0,
     }
 
     walking_reward_scales = {
         "rew_scale_alive":                5.0,
         "rew_scale_terminated":          -5.0,
-        "rew_scale_upright":              3.0,
-        "rew_scale_joint_vel":           -0.05,
-        "rew_scale_torque":              -0.05,
-        "rew_scale_lin_vel":              3.0,   # positive = reward forward x-velocity
-        "rew_scale_target_standing_pose": 0.1,   # light posture encouragement
+        "rew_scale_upright":              2.0,
+        "rew_scale_joint_vel":            0.0,
+        "rew_scale_torque":               0.0,
+        "rew_scale_lin_vel":              4.0,   # positive = reward forward x-velocity
+        "rew_scale_lat_vel":              0.0,   # negative = penalize lateral drift
+        "rew_scale_target_standing_pose": 0.0,   # light posture encouragement
         "rew_scale_height":               2.0,   # stay off the ground
-        "rew_scale_toe_walking":          1.0,
+        "rew_scale_toe_walking":          2.0,
     }
 
     # additional conditions
