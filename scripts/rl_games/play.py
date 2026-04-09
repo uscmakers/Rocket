@@ -38,6 +38,7 @@ parser.add_argument(
     help="When no checkpoint provided, use the last saved model. Otherwise use the best saved model.",
 )
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
+parser.add_argument("--wandb", action="store_true", default=False, help="Log play diagnostics to Weights & Biases.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -87,6 +88,53 @@ from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 import rocket.tasks  # noqa: F401
+
+
+class PlayLogger:
+    """Logs per-step diagnostics for env 0 to Weights & Biases during play.
+
+    Accesses robot state the same way _get_rewards does — via env.unwrapped.robot.data.
+    """
+
+    def __init__(self, run_name: str):
+        import wandb
+        wandb.init(project="rocket-play", name=run_name, reinit=True)
+        self._wandb = wandb
+        self._step = 0
+
+    # Joint order matches _joint_ids = servo_joint_ids + stepper_joint_ids
+    # servo_joint_names  = ["Revolute1", "Revolute2"]  → hip_servo_L, hip_servo_R
+    # hip_joint_names    = ["Revolute3", "Revolute4"]  → hip_stepper_L, hip_stepper_R
+    # knee_joint_names   = ["Revolute5", "Revolute6"]  → knee_stepper_L, knee_stepper_R
+    JOINT_LABELS = [
+        "hip_servo_L", "hip_servo_R",
+        "hip_stepper_L", "hip_stepper_R",
+        "knee_stepper_L", "knee_stepper_R",
+    ]
+
+    def log(self, env):
+        """Sample robot state for env 0 and log all joint diagnostics to wandb."""
+        rocket_env = env.unwrapped
+        joint_ids = rocket_env._joint_ids
+
+        joint_pos = rocket_env.robot.data.joint_pos[0, joint_ids].cpu()
+        joint_vel = rocket_env.robot.data.joint_vel[0, joint_ids].cpu()
+        torques   = rocket_env.robot.data.applied_torque[0, joint_ids].cpu()
+
+        data = {}
+        for i, label in enumerate(self.JOINT_LABELS):
+            data[f"joint_pos/{label}"]    = joint_pos[i].item()
+            data[f"joint_vel/{label}"]    = joint_vel[i].item()
+            data[f"joint_torque/{label}"] = torques[i].item()
+
+        data["joint_vel/max_abs"]    = joint_vel.abs().max().item()
+        data["joint_torque/max_abs"] = torques.abs().max().item()
+
+        self._wandb.log(data, step=self._step)
+        self._step += 1
+
+    def finish(self):
+        self._wandb.finish()
 
 
 @hydra_task_config(args_cli.task, args_cli.agent)
@@ -194,6 +242,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     dt = env.unwrapped.step_dt
 
+    # set up wandb logger if requested
+    play_logger = PlayLogger(run_name=log_dir) if args_cli.wandb else None
+
     # reset environment
     obs = env.reset()
     if isinstance(obs, dict):
@@ -219,7 +270,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             # env stepping
             obs, _, dones, _ = env.step(actions)
 
-            print(f"obs:{obs}\nactions:{actions}")
+            if play_logger is not None:
+                play_logger.log(env)
+
             # perform operations for terminated episodes
             if len(dones) > 0:
                 # reset rnn state for terminated episodes
@@ -236,6 +289,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         sleep_time = dt - (time.time() - start_time)
         if args_cli.real_time and sleep_time > 0:
             time.sleep(sleep_time)
+
+    if play_logger is not None:
+        play_logger.finish()
 
     # close the simulator
     env.close()
