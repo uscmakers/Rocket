@@ -222,7 +222,12 @@ class RocketEnv(DirectRLEnv):
         # Termination conditions
         tilted = distance > self.cfg.max_tilt_distance
 
-        return tilted, time_out
+        vel_limits = self.robot.data.soft_joint_vel_limits[:, self._joint_ids]  # (N, J)
+        joint_vel_exceeded = torch.any(
+            torch.abs(self.joint_vel[:, self._joint_ids]) > vel_limits, dim=-1
+        )  # (N,)
+
+        return tilted | joint_vel_exceeded, time_out
 
     def _reset_idx(self, env_ids: Sequence[int] | None):
         if env_ids is None:
