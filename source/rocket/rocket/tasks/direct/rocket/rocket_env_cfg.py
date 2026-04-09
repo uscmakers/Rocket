@@ -200,6 +200,13 @@ class RocketEnvCfg(DirectRLEnvCfg):
     initial_joint_range = [-0.1, 0.1]  # joint angle randomization on reset [rad]
     target_height = 0.14 # at about 0.12 m, the robot is sitting
 
+    # domain randomization ranges (applied per-env on reset)
+    dr_stiffness_range: tuple = (0.8, 1.2)    # ±20% stiffness multiplier
+    dr_damping_range: tuple = (0.8, 1.2)      # ±20% damping multiplier
+    dr_joint_friction_range: tuple = (0.0, 0.05)  # joint friction coefficient
+    dr_push_force_range: tuple = (-2.0, 2.0)  # random external push force [N] to fake mass variation
+    dr_imu_noise_std: float = 0.01            # gaussian noise on IMU ang_vel and lin_acc
+
     # termination conditions
     max_tilt_distance = 0.75  # max tilt before termination
     min_height: float = 0.10  # min height before termination [m] (currently unused)

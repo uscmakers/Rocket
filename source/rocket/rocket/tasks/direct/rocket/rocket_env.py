@@ -60,6 +60,18 @@ class RocketEnv(DirectRLEnv):
 
         self.prev_actions = torch.zeros(self.num_envs, self.cfg.action_space, device=self.device)
 
+        # Action delay buffer for sim-to-real robustness.
+        # Each env gets a random delay in [0, max_action_delay] steps, re-sampled each episode.
+        # This mimics stepper motor lag and serial communication latency on real hardware.
+        self._max_action_delay = self.cfg.max_action_delay
+        self._action_buf = torch.zeros(
+            self.num_envs, self._max_action_delay + 1, self.cfg.action_space, device=self.device
+        )  # circular buffer: shape (num_envs, max_delay+1, action_dim)
+        self._buf_idx = 0  # current write index into the circular buffer
+        self._action_delay = torch.randint(
+            0, self._max_action_delay + 1, (self.num_envs,), device=self.device
+        )  # per-env delay in [0, max_action_delay]
+
         # Log dict for reward components and diagnostics
         self.extras["log"] = {}
 
@@ -127,12 +139,17 @@ class RocketEnv(DirectRLEnv):
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
 
+        # Add gaussian noise to IMU signals to simulate real sensor noise
+        noise_std = self.cfg.dr_imu_noise_std
+        ang_vel_noisy = imu.ang_vel_b + noise_std * torch.randn_like(imu.ang_vel_b)
+        lin_acc_noisy = imu.lin_acc_b + noise_std * torch.randn_like(imu.lin_acc_b)
+
         obs = torch.cat(
             (
                 self.joint_pos[:, self._joint_ids],          # (6,) all joint positions
                 self.joint_vel[:, self._stepper_joint_ids],  # (4,) stepper joint velocities only
-                imu.ang_vel_b,                               # (3,) angular velocity
-                imu.lin_acc_b,                               # (3,) linear acceleration
+                ang_vel_noisy,                               # (3,) angular velocity + noise
+                lin_acc_noisy,                               # (3,) linear acceleration + noise
                 imu.quat_w,                                  # (4,) orientation quaternion
             ),
             dim=-1,
@@ -235,7 +252,7 @@ class RocketEnv(DirectRLEnv):
 
         # Randomize spawn height slightly
         default_root_state[:, 2] += sample_uniform(
-            -0.05, 0.05,
+            -0.02, 0.02,
             (len(env_ids),),
             default_root_state.device
         )
@@ -247,3 +264,36 @@ class RocketEnv(DirectRLEnv):
         self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
         self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
+
+        # --- Domain randomization ---
+        num_reset = len(env_ids)
+        num_joints = len(self._joint_ids)
+
+        # Stiffness: per-env per-joint multiplier
+        default_stiffness = self.robot.data.default_joint_stiffness[env_ids][:, self._joint_ids]
+        stiffness_mult = sample_uniform(
+            self.cfg.dr_stiffness_range[0], self.cfg.dr_stiffness_range[1],
+            (num_reset, num_joints), self.device
+        )
+        self.robot.write_joint_stiffness_to_sim(
+            default_stiffness * stiffness_mult, joint_ids=self._joint_ids, env_ids=env_ids
+        )
+
+        # Damping: per-env per-joint multiplier
+        default_damping = self.robot.data.default_joint_damping[env_ids][:, self._joint_ids]
+        damping_mult = sample_uniform(
+            self.cfg.dr_damping_range[0], self.cfg.dr_damping_range[1],
+            (num_reset, num_joints), self.device
+        )
+        self.robot.write_joint_damping_to_sim(
+            default_damping * damping_mult, joint_ids=self._joint_ids, env_ids=env_ids
+        )
+
+        # Joint friction: per-env per-joint additive
+        joint_friction = sample_uniform(
+            self.cfg.dr_joint_friction_range[0], self.cfg.dr_joint_friction_range[1],
+            (num_reset, num_joints), self.device
+        )
+        self.robot.write_joint_friction_coefficient_to_sim(
+            joint_friction, joint_ids=self._joint_ids, env_ids=env_ids
+        )
