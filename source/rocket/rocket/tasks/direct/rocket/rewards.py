@@ -236,6 +236,7 @@ def compute_walking_rewards(
     rew_scale_height: float,
     rew_scale_toe_walking: float,
     rew_scale_action_rate: float,
+    rew_scale_vertical_vel: float,
     quat_w: torch.Tensor,                # (N, 4)
     root_lin_vel_w: torch.Tensor,        # (N, 3)
     joint_pos: torch.Tensor,             # (N, J)
