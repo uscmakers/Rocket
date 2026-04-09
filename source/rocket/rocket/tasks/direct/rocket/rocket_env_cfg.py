@@ -168,17 +168,17 @@ class RocketEnvCfg(DirectRLEnvCfg):
     # reward scale presets (applied at env init based on policy_type)
     standing_reward_scales = {
         "rew_scale_alive":                5.0,
-        "rew_scale_terminated":          -5.0,
+        "rew_scale_terminated":           -5.0,
         "rew_scale_upright":              3.0,
-        "rew_scale_joint_vel":           -1.0,
+        "rew_scale_joint_vel":           -1.5,
         "rew_scale_torque":              -0.0,
-        "rew_scale_lin_vel":             -3.0,
-        "rew_scale_lat_vel":             -3.0,
+        "rew_scale_lin_vel":             -1.0,
+        "rew_scale_lat_vel":             -0.0,
         "rew_scale_target_standing_pose": 2.0,
         "rew_scale_height":               0.0,
         "rew_scale_toe_walking":          3.0,
-        "rew_scale_action_rate":         -0.1,
-        "rew_scale_vertical_vel":        -0.5,
+        "rew_scale_action_rate":         -0.0,
+        "rew_scale_vertical_vel":        -1.0,
     }
 
     walking_reward_scales = {

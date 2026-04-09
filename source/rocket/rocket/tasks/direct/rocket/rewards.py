@@ -60,8 +60,8 @@ def rew_toe_walking(
     """
     calf_mag = torch.norm(calf_forces, dim=-1)  # (N, 2)
     toe_mag  = torch.norm(toe_forces,  dim=-1)  # (N, 2)
+    # return (toe_mag - calf_mag).min(dim=-1).values
     return (toe_mag - calf_mag).min(dim=-1).values
-
 
 
 

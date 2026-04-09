@@ -184,7 +184,7 @@ class RocketEnv(DirectRLEnv):
             calf_forces=self.contact_sensor_calves.data.net_forces_w,
             toe_forces=self.contact_sensor_toes.data.net_forces_w,
         )
-        rew_toe_walking_debug(reward_kwargs["calf_forces"], reward_kwargs["toe_forces"])
+        # rew_toe_walking_debug(reward_kwargs["calf_forces"], reward_kwargs["toe_forces"])
 
         if self.policy_type == "walking":
             total_reward, components = compute_walking_rewards(**reward_kwargs)
