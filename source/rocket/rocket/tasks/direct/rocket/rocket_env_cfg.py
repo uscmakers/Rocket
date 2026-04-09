@@ -178,7 +178,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
         "rew_scale_target_standing_pose": 2.0,
         "rew_scale_height":               0.0,
         "rew_scale_toe_walking":          3.0,
-        "rew_scale_action_rate":         -0.0,
+        "rew_scale_action_rate":         -0.1,
         "rew_scale_vertical_vel":        -1.0,
         "rew_scale_jerk":                -0.05,
     }
@@ -210,5 +210,5 @@ class RocketEnvCfg(DirectRLEnvCfg):
     dr_imu_noise_std: float = 0.01            # gaussian noise on IMU ang_vel and lin_acc
 
     # termination conditions
-    max_tilt_distance = 0.75  # max tilt before termination
+    max_tilt_distance = 0.50  # max tilt before termination
     min_height: float = 0.10  # min height before termination [m] (currently unused)
