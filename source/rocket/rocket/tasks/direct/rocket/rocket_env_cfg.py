@@ -181,7 +181,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
         "rew_scale_toe_walking":          3.0,
         "rew_scale_action_rate":         -0.1,
         "rew_scale_vertical_vel":        -1.0,
-        "rew_scale_jerk":                -0.05,
+        "rew_scale_jerk":                -0.1,
         "rew_scale_alternating_contact":  0.0,
     }
 
