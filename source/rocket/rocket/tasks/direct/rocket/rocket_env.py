@@ -37,9 +37,20 @@ class RocketEnv(DirectRLEnv):
         super().__init__(cfg, render_mode, **kwargs)
 
         # Find joint indices by group
-        self._servo_joint_ids, _ = self.robot.find_joints(self.cfg.servo_joint_names)
-        self._stepper_joint_ids, _ = self.robot.find_joints(self.cfg.stepper_joint_names)
-        self._joint_ids = self._servo_joint_ids + self._stepper_joint_ids
+        self._servo_joint_ids, _        = self.robot.find_joints(self.cfg.servo_joint_names)
+        self._hip_stepper_joint_ids, _  = self.robot.find_joints(self.cfg.hip_joint_names)
+        self._knee_stepper_joint_ids, _ = self.robot.find_joints(self.cfg.knee_joint_names)
+        self._stepper_joint_ids = self._hip_stepper_joint_ids + self._knee_stepper_joint_ids
+        self._joint_ids         = self._servo_joint_ids + self._stepper_joint_ids
+
+        # Velocity limits from actuator cfg (URDF joint limits may be unset/inf)
+        # Order matches _joint_ids = servo + hip_stepper + knee_stepper
+        vel_limit_list = (
+            [self.cfg.robot_cfg.actuators["servos"].velocity_limit]       * len(self._servo_joint_ids) +
+            [self.cfg.robot_cfg.actuators["hip_steppers"].velocity_limit]  * len(self._hip_stepper_joint_ids) +
+            [self.cfg.robot_cfg.actuators["knee_steppers"].velocity_limit] * len(self._knee_stepper_joint_ids)
+        )
+        self.joint_vel_limits = torch.tensor(vel_limit_list, device=self.device).unsqueeze(0)  # (1, num_joints)
         self.imu = self.scene["imu"]
         self.contact_sensor_calves: ContactSensor = self.scene["contact_sensor_calves"]
         self.contact_sensor_toes: ContactSensor = self.scene["contact_sensor_toes"]
@@ -162,6 +173,7 @@ class RocketEnv(DirectRLEnv):
             rew_scale_action_rate=self.cfg.rew_scale_action_rate,
             rew_scale_vertical_vel=self.cfg.rew_scale_vertical_vel,
             rew_scale_jerk=self.cfg.rew_scale_jerk,
+            rew_scale_alternating_contact=self.cfg.rew_scale_alternating_contact,
             quat_w=self.imu.data.quat_w,
             root_lin_vel_w=self.robot.data.root_lin_vel_w[:, :3],
             joint_pos=self.joint_pos[:, self._joint_ids],
@@ -222,9 +234,8 @@ class RocketEnv(DirectRLEnv):
         # Termination conditions
         tilted = distance > self.cfg.max_tilt_distance
 
-        vel_limits = self.robot.data.soft_joint_vel_limits[:, self._joint_ids]  # (N, J)
         joint_vel_exceeded = torch.any(
-            torch.abs(self.joint_vel[:, self._joint_ids]) > vel_limits, dim=-1
+            torch.abs(self.joint_vel[:, self._joint_ids]) > self.joint_vel_limits, dim=-1
         )  # (N,)
 
         return tilted | joint_vel_exceeded, time_out

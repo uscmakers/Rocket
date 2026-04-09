@@ -165,6 +165,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
     rew_scale_toe_walking: float = 1.0  # reward toe ground contact, penalize calf ground contact
     rew_scale_action_rate: float = -0.1   # penalize rapid action changes to reduce jitter
     rew_scale_jerk: float = -0.05         # penalize second-order action changes (discrete jerk)
+    rew_scale_alternating_contact: float = 0.0  # reward alternating toe contact (walking only)
 
     # reward scale presets (applied at env init based on policy_type)
     standing_reward_scales = {
@@ -181,6 +182,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
         "rew_scale_action_rate":         -0.1,
         "rew_scale_vertical_vel":        -1.0,
         "rew_scale_jerk":                -0.05,
+        "rew_scale_alternating_contact":  0.0,
     }
 
     walking_reward_scales = {
@@ -197,6 +199,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
         "rew_scale_action_rate":         -0.1,
         "rew_scale_vertical_vel":         0.0,  # not penalized during walking
         "rew_scale_jerk":                -0.05,
+        "rew_scale_alternating_contact":  1.0,  # reward alternating gait
     }
 
     # additional conditions
