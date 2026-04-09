@@ -60,18 +60,6 @@ class RocketEnv(DirectRLEnv):
 
         self.prev_actions = torch.zeros(self.num_envs, self.cfg.action_space, device=self.device)
 
-        # Action delay buffer for sim-to-real robustness.
-        # Each env gets a random delay in [0, max_action_delay] steps, re-sampled each episode.
-        # This mimics stepper motor lag and serial communication latency on real hardware.
-        self._max_action_delay = self.cfg.max_action_delay
-        self._action_buf = torch.zeros(
-            self.num_envs, self._max_action_delay + 1, self.cfg.action_space, device=self.device
-        )  # circular buffer: shape (num_envs, max_delay+1, action_dim)
-        self._buf_idx = 0  # current write index into the circular buffer
-        self._action_delay = torch.randint(
-            0, self._max_action_delay + 1, (self.num_envs,), device=self.device
-        )  # per-env delay in [0, max_action_delay]
-
         # Log dict for reward components and diagnostics
         self.extras["log"] = {}
 
