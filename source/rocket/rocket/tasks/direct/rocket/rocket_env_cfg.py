@@ -164,6 +164,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
     rew_scale_height: float = 1.0
     rew_scale_toe_walking: float = 1.0  # reward toe ground contact, penalize calf ground contact
     rew_scale_action_rate: float = -0.1   # penalize rapid action changes to reduce jitter
+    rew_scale_jerk: float = -0.05         # penalize second-order action changes (discrete jerk)
 
     # reward scale presets (applied at env init based on policy_type)
     standing_reward_scales = {
@@ -179,6 +180,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
         "rew_scale_toe_walking":          3.0,
         "rew_scale_action_rate":         -0.0,
         "rew_scale_vertical_vel":        -1.0,
+        "rew_scale_jerk":                -0.05,
     }
 
     walking_reward_scales = {
@@ -194,6 +196,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
         "rew_scale_toe_walking":          2.0,
         "rew_scale_action_rate":         -0.1,
         "rew_scale_vertical_vel":         0.0,  # not penalized during walking
+        "rew_scale_jerk":                -0.05,
     }
 
     # additional conditions
@@ -204,7 +207,6 @@ class RocketEnvCfg(DirectRLEnvCfg):
     dr_stiffness_range: tuple = (0.8, 1.2)    # ±20% stiffness multiplier
     dr_damping_range: tuple = (0.8, 1.2)      # ±20% damping multiplier
     dr_joint_friction_range: tuple = (0.0, 0.05)  # joint friction coefficient
-    dr_push_force_range: tuple = (-2.0, 2.0)  # random external push force [N] to fake mass variation
     dr_imu_noise_std: float = 0.01            # gaussian noise on IMU ang_vel and lin_acc
 
     # termination conditions

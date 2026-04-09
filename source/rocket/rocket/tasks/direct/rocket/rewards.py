@@ -94,6 +94,20 @@ def rew_action_rate_penalty(actions: torch.Tensor, prev_actions: torch.Tensor) -
 
 
 @torch.jit.script
+def rew_jerk_penalty(
+    actions: torch.Tensor,           # (N, J) current actions
+    prev_actions: torch.Tensor,      # (N, J) actions from t-1
+    prev_prev_actions: torch.Tensor, # (N, J) actions from t-2
+) -> torch.Tensor:
+    """Sum of squared second-order action differences (discrete jerk).
+
+    Jerk = d²a/dt² ≈ a_t - 2*a_{t-1} + a_{t-2}.
+    Returns (N,); caller applies negative scale.
+    """
+    return torch.sum(torch.square(actions - 2.0 * prev_actions + prev_prev_actions), dim=-1)
+
+
+@torch.jit.script
 def rew_vertical_vel_penalty(root_lin_vel_w: torch.Tensor) -> torch.Tensor:
     """Squared vertical (z) velocity. Returns (N,); caller applies negative scale."""
     return torch.square(root_lin_vel_w[:, 2])
@@ -156,12 +170,14 @@ def compute_standing_rewards(
     rew_scale_toe_walking: float,
     rew_scale_action_rate: float,
     rew_scale_vertical_vel: float,
+    rew_scale_jerk: float,
     quat_w: torch.Tensor,                # (N, 4)
     root_lin_vel_w: torch.Tensor,        # (N, 3)
     joint_pos: torch.Tensor,             # (N, J)
     joint_vel: torch.Tensor,             # (N, J)
     actions: torch.Tensor,               # (N, J)
     prev_actions: torch.Tensor,          # (N, J)
+    prev_prev_actions: torch.Tensor,     # (N, J)
     torques: torch.Tensor,               # (N, J)
     reset_terminated: torch.Tensor,      # (N,)
     target_standing_pose: torch.Tensor,  # (1 or N, J)
@@ -181,6 +197,7 @@ def compute_standing_rewards(
     rew_toe_r          = rew_scale_toe_walking  * rew_toe_walking(calf_forces, toe_forces)
     rew_action_rate_r  = rew_scale_action_rate  * rew_action_rate_penalty(actions, prev_actions)
     rew_vertical_vel_r = rew_scale_vertical_vel * rew_vertical_vel_penalty(root_lin_vel_w)
+    rew_jerk_r         = rew_scale_jerk         * rew_jerk_penalty(actions, prev_actions, prev_prev_actions)
 
     # Penalize horizontal movement in both directions equally (abs so backward motion isn't rewarded)
     forward_vel, lateral_vel = rew_heading_vel(quat_w, root_lin_vel_w)
@@ -194,7 +211,7 @@ def compute_standing_rewards(
     total_reward = (
         rew_alive + rew_terminated + rew_up + rew_lin_vel
         + rew_jvel + rew_torque_r + rew_pose_r + rew_height_r + rew_toe_r
-        + rew_action_rate_r + rew_vertical_vel_r
+        + rew_action_rate_r + rew_vertical_vel_r + rew_jerk_r
     )
 
     components: dict[str, torch.Tensor] = {
@@ -214,6 +231,7 @@ def compute_standing_rewards(
         "toe_walking":          rew_toe_r,
         "action_rate":          rew_action_rate_r,
         "vertical_vel":         rew_vertical_vel_r,
+        "jerk":                 rew_jerk_r,
     }
 
     return total_reward, components
@@ -237,12 +255,14 @@ def compute_walking_rewards(
     rew_scale_toe_walking: float,
     rew_scale_action_rate: float,
     rew_scale_vertical_vel: float,
+    rew_scale_jerk: float,
     quat_w: torch.Tensor,                # (N, 4)
     root_lin_vel_w: torch.Tensor,        # (N, 3)
     joint_pos: torch.Tensor,             # (N, J)
     joint_vel: torch.Tensor,             # (N, J)
     actions: torch.Tensor,               # (N, J)
     prev_actions: torch.Tensor,          # (N, J)
+    prev_prev_actions: torch.Tensor,     # (N, J)
     torques: torch.Tensor,               # (N, J)
     reset_terminated: torch.Tensor,      # (N,)
     target_standing_pose: torch.Tensor,  # (1 or N, J)
@@ -261,6 +281,7 @@ def compute_walking_rewards(
     rew_pose_r        = rew_scale_target_standing_pose * rew_pose(joint_pos, target_standing_pose)
     rew_toe_r         = rew_scale_toe_walking  * rew_toe_walking(calf_forces, toe_forces)
     rew_action_rate_r = rew_scale_action_rate * rew_action_rate_penalty(actions, prev_actions)
+    rew_jerk_r        = rew_scale_jerk        * rew_jerk_penalty(actions, prev_actions, prev_prev_actions)
 
     # Forward reward + lateral penalty in the robot's heading frame
     forward_vel, lateral_vel = rew_heading_vel(quat_w, root_lin_vel_w)
@@ -269,7 +290,7 @@ def compute_walking_rewards(
     total_reward = (
         rew_alive + rew_terminated + rew_up + rew_lin_vel
         + rew_height_r + rew_pose_r + rew_jvel + rew_torque_r + rew_toe_r
-        + rew_action_rate_r
+        + rew_action_rate_r + rew_jerk_r
     )
 
     components: dict[str, torch.Tensor] = {
@@ -285,6 +306,7 @@ def compute_walking_rewards(
         "torque":               rew_torque_r,
         "toe_walking":          rew_toe_r,
         "action_rate":          rew_action_rate_r,
+        "jerk":                 rew_jerk_r,
     }
 
     return total_reward, components
