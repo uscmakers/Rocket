@@ -219,6 +219,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             # env stepping
             obs, _, dones, _ = env.step(actions)
 
+            print(f"obs:{obs}\nactions:{actions}")
             # perform operations for terminated episodes
             if len(dones) > 0:
                 # reset rnn state for terminated episodes
