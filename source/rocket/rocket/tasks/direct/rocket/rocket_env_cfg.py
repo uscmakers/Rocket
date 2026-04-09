@@ -39,7 +39,7 @@ ROCKET_CFG = ArticulationCfg(
         )
     ),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.2),  # Initial position (spawn at 0.3m height)
+        pos=(0.0, 0.0, 0.16),  # Initial position (spawn at 0.3m height)
         joint_pos={"Revolute.*": 0.0},  # All joints start at 0
     ),
     actuators={

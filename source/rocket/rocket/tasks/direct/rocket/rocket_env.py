@@ -62,6 +62,8 @@ class RocketEnv(DirectRLEnv):
         joint_limits = self.robot.data.soft_joint_pos_limits[:, self._joint_ids]  # (num_envs, num_joints, 2)
         self.joint_pos_mid = (joint_limits[..., 0] + joint_limits[..., 1]) * 0.5
         self.joint_pos_range = (joint_limits[..., 1] - joint_limits[..., 0]) * 0.5  # half-range as scale
+        print(f"Joint position mid: {self.joint_pos_mid}")
+        print(f"Joint position range: {self.joint_pos_range}")
 
         # Calculate the target standing pose (servos should be at 0 degrees, steppers should be at their negative limit to rep 45 deg limit)
         target_pos = torch.zeros(1, len(self._joint_ids), device=self.device)
@@ -260,7 +262,7 @@ class RocketEnv(DirectRLEnv):
 
         # Randomize spawn height slightly
         default_root_state[:, 2] += sample_uniform(
-            -0.02, 0.02,
+            -0.01, 0.01,
             (len(env_ids),),
             default_root_state.device
         )
