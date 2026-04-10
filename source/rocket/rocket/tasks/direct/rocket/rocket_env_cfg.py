@@ -3,24 +3,23 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import os
+from pathlib import Path
+
+import isaaclab.envs.mdp as mdp
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
 from isaaclab.envs import DirectRLEnvCfg
+from isaaclab.managers import EventTermCfg as EventTerm, SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.sensors import ContactSensorCfg, ImuCfg, TiledCameraCfg
 from isaaclab.sim import SimulationCfg, UrdfConverterCfg
 from isaaclab.utils import configclass
-from isaaclab.sensors import ImuCfg, TiledCameraCfg, ContactSensorCfg
-
-import torch
-import math
 
 ##
 # Rocket Robot Configuration
 ##
-
-import os
-from pathlib import Path
 
 ROCKET_PACKAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 URDF_PATH = os.path.join(ROCKET_PACKAGE_DIR, "data", "Rocket.urdf")
@@ -39,7 +38,7 @@ ROCKET_CFG = ArticulationCfg(
         )
     ),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.2),  # Initial position (spawn at 0.3m height)
+        pos=(0.0, 0.0, 0.2),  # spawn at 0.2m height
         joint_pos={"Revolute.*": 0.0},  # All joints start at 0
     ),
     actuators={
@@ -114,6 +113,113 @@ class RocketSceneCfg(InteractiveSceneCfg):
     )
 
 @configclass
+class ObsNoiseCfg:
+    """Per-channel observation noise standard deviations (Gaussian, zero-mean).
+
+    Set any value to 0.0 to disable noise for that channel.
+    Realistic IMU noise: lin_acc >> ang_vel > quat (filtered). Encoders are relatively clean.
+    """
+    joint_pos_std: float = 0.01   # rad  — encoder quantization + flex
+    joint_vel_std: float = 0.05   # rad/s — numerical differentiation amplifies noise
+    ang_vel_std:   float = 0.05   # rad/s — MEMS gyro
+    lin_acc_std:   float = 0.10   # m/s²  — MEMS accelerometer (noisiest sensor)
+    quat_std:      float = 0.005  # unitless — orientation filter smooths this out
+
+
+@configclass
+class EventCfg:
+    """Domain randomization events, ordered from most to least impactful for sim-to-real transfer."""
+
+    # -------------------------------------------------------------------------
+    # HIGH IMPACT — startup (applied once at env creation; CPU-only PhysX writes)
+    # -------------------------------------------------------------------------
+
+    # Mass variation accounts for battery charge state, payload, and manufacturing tolerances.
+    randomize_mass = EventTerm(
+        func=mdp.randomize_rigid_body_mass,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "mass_distribution_params": (0.85, 1.15),  # ±15% of URDF mass per body
+            "operation": "scale",
+            "distribution": "uniform",
+        },
+    )
+
+    # Stepper motor gains vary significantly unit-to-unit and with temperature.
+    randomize_actuator_gains = EventTerm(
+        func=mdp.randomize_actuator_gains,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+            "stiffness_distribution_params": (0.75, 1.25),  # ±25%
+            "damping_distribution_params": (0.75, 1.25),
+            "operation": "scale",
+            "distribution": "uniform",
+        },
+    )
+
+    # -------------------------------------------------------------------------
+    # HIGH IMPACT — reset (applied every episode; encourages diverse initial states)
+    # -------------------------------------------------------------------------
+
+    # Joint position noise prevents the policy from overfitting to a single start pose.
+    reset_joints = EventTerm(
+        func=mdp.reset_joints_by_offset,
+        mode="reset",
+        params={
+            "position_range": (-0.1, 0.1),  # ±0.1 rad (~6°) around default
+            "velocity_range": (0.0, 0.0),
+        },
+    )
+
+    # -------------------------------------------------------------------------
+    # MEDIUM IMPACT — interval (applied periodically during an episode)
+    # -------------------------------------------------------------------------
+
+    # Random velocity pushes force the policy to learn active balance recovery.
+    push_robot = EventTerm(
+        func=mdp.push_by_setting_velocity,
+        mode="interval",
+        interval_range_s=(3.0, 6.0),
+        params={
+            "velocity_range": {"x": (-0.2, 0.2), "y": (-0.2, 0.2)},
+        },
+    )
+
+    # -------------------------------------------------------------------------
+    # MEDIUM IMPACT — startup (manufacturing shifts center of mass)
+    # -------------------------------------------------------------------------
+
+    # COM offsets model asymmetric mass distribution from wiring, fasteners, and tolerances.
+    randomize_com = EventTerm(
+        func=mdp.randomize_rigid_body_com,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "com_range": {"x": (-0.01, 0.01), "y": (-0.01, 0.01), "z": (-0.01, 0.01)},  # ±1 cm
+        },
+    )
+
+    # -------------------------------------------------------------------------
+    # LOW IMPACT — startup (floor surface friction varies by environment)
+    # -------------------------------------------------------------------------
+
+    # Toe friction affects slip behavior; real floors range from carpet to tile.
+    randomize_foot_friction = EventTerm(
+        func=mdp.randomize_rigid_body_material,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names="Toe_.*"),
+            "static_friction_range": (0.5, 1.5),
+            "dynamic_friction_range": (0.5, 1.0),
+            "restitution_range": (0.0, 0.1),
+            "num_buckets": 64,
+        },
+    )
+
+
+@configclass
 class RocketEnvCfg(DirectRLEnvCfg):
     # env
     decimation = 2
@@ -136,6 +242,12 @@ class RocketEnvCfg(DirectRLEnvCfg):
 
     # scene
     scene: RocketSceneCfg = RocketSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
+
+    # domain randomization
+    events: EventCfg = EventCfg()
+
+    # per-channel observation noise (applied in _get_observations)
+    obs_noise: ObsNoiseCfg = ObsNoiseCfg()
 
     # robot joint names (from URDF)
     servo_joint_names = ["Revolute1", "Revolute2"]        # hip yaw (position-controlled servos)
@@ -170,10 +282,10 @@ class RocketEnvCfg(DirectRLEnvCfg):
         "rew_scale_upright":              2.0,
         "rew_scale_joint_vel":           -0.0,
         "rew_scale_torque":              -0.0,
-        "rew_scale_lin_vel":             -0.05, # FIXME: this penalizes velocity in all directions, naming is inconsistent with walking rewards. Create a RewardScale object to store these scalars instead
+        "rew_scale_lin_vel":             -0.5, # FIXME: this penalizes velocity in all directions, naming is inconsistent with walking rewards. Create a RewardScale object to store these scalars instead
         "rew_scale_lat_vel":              0.0,
-        "rew_scale_target_standing_pose": 1.0,
-        "rew_scale_height":               0.0,
+        "rew_scale_target_standing_pose": 0.0,
+        "rew_scale_height":               2.0,
         "rew_scale_toe_walking":          3.0,
     }
 
@@ -191,7 +303,6 @@ class RocketEnvCfg(DirectRLEnvCfg):
     }
 
     # additional conditions
-    initial_joint_range = [-0.1, 0.1]  # joint angle randomization on reset [rad]
     target_height = 0.14 # at about 0.12 m, the robot is sitting
 
     # termination conditions
