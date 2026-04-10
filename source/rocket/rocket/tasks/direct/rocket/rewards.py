@@ -54,14 +54,12 @@ def rew_toe_walking(
     calf_forces: torch.Tensor,  # (N, 2, 3)
     toe_forces: torch.Tensor,   # (N, 2, 3)
 ) -> torch.Tensor:
-    """toe contacts minus calf contacts, summed across legs.
-
-    Returns (N,) in [-2, +2]; positive = good (toe contact), negative = bad (calf contact).
+    """Penalty for calf ground contact. Returns (N,) <= 0; 0 = calf off ground, negative = calf contact.
+    Toe contact and airborne are both 0 — no conflict with alternating_contact reward.
+    Caller applies a positive scale so this acts as a penalty.
     """
     calf_mag = torch.norm(calf_forces, dim=-1)  # (N, 2)
-    toe_mag  = torch.norm(toe_forces,  dim=-1)  # (N, 2)
-    # return (toe_mag - calf_mag).min(dim=-1).values
-    return (toe_mag - calf_mag).min(dim=-1).values
+    return -calf_mag.sum(dim=-1)                # (N,) always <= 0
 
 
 
