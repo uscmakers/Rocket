@@ -116,7 +116,8 @@ if [ "$ROBOLAND" = true ]; then
     source ~/env_isaaclab/bin/activate
     python3 -u scripts/rl_games/play.py \
         --checkpoint "$CHECKPOINT" \
-        --num_envs 1
+        --num_envs 1 \
+	--wandb
 else
     export ACCEPT_EULA=Y
     export PRIVACY_CONSENT=Y
