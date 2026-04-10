@@ -38,7 +38,7 @@ ROCKET_CFG = ArticulationCfg(
         )
     ),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.2),  # spawn at 0.2m height
+        pos=(0.0, 0.0, 0.16),  # Initial position (spawn at 0.3m height)
         joint_pos={"Revolute.*": 0.0},  # All joints start at 0
     ),
     actuators={
@@ -270,23 +270,31 @@ class RocketEnvCfg(DirectRLEnvCfg):
     rew_scale_joint_vel: float = -0.05
     rew_scale_torque: float = -0.1
     rew_scale_lin_vel: float = -0.05
-    rew_scale_lat_vel: float = 0.0
+    rew_scale_lat_vel: float = -0.05
+    rew_scale_vertical_vel: float = -0.5  # penalize vertical bouncing (standing only)
     rew_scale_target_standing_pose: float = 1.0
     rew_scale_height: float = 1.0
     rew_scale_toe_walking: float = 1.0  # reward toe ground contact, penalize calf ground contact
+    rew_scale_action_rate: float = -0.1   # penalize rapid action changes to reduce jitter
+    rew_scale_jerk: float = -0.05         # penalize second-order action changes (discrete jerk)
+    rew_scale_alternating_contact: float = 0.0  # reward alternating toe contact (walking only)
 
     # reward scale presets (applied at env init based on policy_type)
     standing_reward_scales = {
         "rew_scale_alive":                5.0,
-        "rew_scale_terminated":          -5.0,
-        "rew_scale_upright":              2.0,
-        "rew_scale_joint_vel":           -0.0,
+        "rew_scale_terminated":           -5.0,
+        "rew_scale_upright":              3.0,
+        "rew_scale_joint_vel":           -1.5,
         "rew_scale_torque":              -0.0,
-        "rew_scale_lin_vel":             -0.5, # FIXME: this penalizes velocity in all directions, naming is inconsistent with walking rewards. Create a RewardScale object to store these scalars instead
-        "rew_scale_lat_vel":              0.0,
-        "rew_scale_target_standing_pose": 0.0,
-        "rew_scale_height":               2.0,
+        "rew_scale_lin_vel":             -1.0,
+        "rew_scale_lat_vel":             -0.0,
+        "rew_scale_target_standing_pose": 2.0,
+        "rew_scale_height":               0.0,
         "rew_scale_toe_walking":          3.0,
+        "rew_scale_action_rate":         -0.1,
+        "rew_scale_vertical_vel":        -1.0,
+        "rew_scale_jerk":                -0.1,
+        "rew_scale_alternating_contact":  0.0,
     }
 
     walking_reward_scales = {
@@ -296,15 +304,25 @@ class RocketEnvCfg(DirectRLEnvCfg):
         "rew_scale_joint_vel":            0.0,
         "rew_scale_torque":               0.0,
         "rew_scale_lin_vel":              4.0,   # positive = reward forward x-velocity
-        "rew_scale_lat_vel":              0.0,   # negative = penalize lateral drift
+        "rew_scale_lat_vel":             -0.05,  # penalize lateral drift
         "rew_scale_target_standing_pose": 0.0,   # light posture encouragement
         "rew_scale_height":               2.0,   # stay off the ground
         "rew_scale_toe_walking":          2.0,
+        "rew_scale_action_rate":         -0.1,
+        "rew_scale_vertical_vel":         0.0,  # not penalized during walking
+        "rew_scale_jerk":                -0.05,
+        "rew_scale_alternating_contact":  1.0,  # reward alternating gait
     }
 
     # additional conditions
     target_height = 0.14 # at about 0.12 m, the robot is sitting
 
+    # domain randomization ranges (applied per-env on reset)
+    dr_stiffness_range: tuple = (0.8, 1.2)    # ±20% stiffness multiplier
+    dr_damping_range: tuple = (0.8, 1.2)      # ±20% damping multiplier
+    dr_joint_friction_range: tuple = (0.0, 0.05)  # joint friction coefficient
+    dr_imu_noise_std: float = 0.01            # gaussian noise on IMU ang_vel and lin_acc
+
     # termination conditions
-    max_tilt_distance = 0.75  # max tilt before termination
+    max_tilt_distance = 0.50  # max tilt before termination
     min_height: float = 0.10  # min height before termination [m] (currently unused)

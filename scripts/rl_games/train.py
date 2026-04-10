@@ -90,7 +90,6 @@ from isaaclab.utils.dict import print_dict
 from isaaclab.utils.io import dump_yaml
 
 from isaaclab_rl.rl_games import MultiObserver, PbtAlgoObserver, RlGamesGpuEnv, RlGamesVecEnvWrapper
-from isaaclab_rl.rsl_rl.exporter import export_policy_as_onnx
 
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils.hydra import hydra_task_config
@@ -100,47 +99,7 @@ logger = logging.getLogger(__name__)
 
 import rocket.tasks  # noqa: F401
 
-def export_trained_policy_to_onnx(log_root_path, log_dir, config_name, agent_cfg):
-    """Export the final trained RL-Games policy to ONNX in the nn/ directory."""
-
-    from isaaclab_rl.rsl_rl.exporter import export_policy_as_onnx
-    from rl_games.torch_runner import Runner
-    from rl_games.common.algo_observer import IsaacAlgoObserver
-
-    # paths
-    export_dir = os.path.join(log_root_path, log_dir, "nn")
-    os.makedirs(export_dir, exist_ok=True)
-
-    final_ckpt = os.path.join(export_dir, f"{config_name}.pth")
-    export_name = f"{config_name}.onnx"
-
-    # load trained policy
-    export_runner = Runner(IsaacAlgoObserver())
-    export_runner.load(agent_cfg)
-
-    export_agent = export_runner.create_player()
-    export_agent.restore(final_ckpt)
-    export_agent.reset()
-
-    policy = export_agent.model
-
-    # find normalizer if it exists
-    normalizer = None
-    for attr in ("actor_obs_normalizer", "student_obs_normalizer"):
-        if hasattr(policy, attr):
-            normalizer = getattr(policy, attr)
-            break
-
-    # export
-    export_policy_as_onnx(
-        policy=policy,
-        normalizer=normalizer,
-        path=export_dir,
-        filename=export_name,
-        verbose=False,
-    )
-
-    print(f"[INFO] Exported ONNX to: {os.path.join(export_dir, export_name)}")
+from exporter import export_trained_policy_to_onnx
 
 @hydra_task_config(args_cli.task, args_cli.agent)
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
