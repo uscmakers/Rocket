@@ -242,7 +242,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
     # set to False to disable all startup domain randomization (mass, gains, COM, friction).
     # reset_root_state and reset_joints are always active regardless of this flag.
     # recommended workflow: train without DR first, then enable once policy is stable.
-    enable_domain_randomization: bool = False
+    enable_domain_randomization: bool = True
 
     # spaces definition - UPDATED for 6 DOF robot
     action_space = 6  # 6 joints to control
@@ -290,15 +290,5 @@ class RocketEnvCfg(DirectRLEnvCfg):
     # active reward config — set by policy_type at env init, or override directly
     rewards: RewardCfg = RewardCfg()  # overwritten at env init from POLICIES[policy_type]
 
-    # additional conditions
-    target_height = 0.14 # at about 0.12 m, the robot is sitting
-
-    # domain randomization ranges (applied per-env on reset)
-    dr_stiffness_range: tuple = (0.8, 1.2)    # ±20% stiffness multiplier
-    dr_damping_range: tuple = (0.8, 1.2)      # ±20% damping multiplier
-    dr_joint_friction_range: tuple = (0.0, 0.05)  # joint friction coefficient
-    dr_imu_noise_std: float = 0.01            # gaussian noise on IMU ang_vel and lin_acc
-
     # termination conditions
     max_tilt_distance = 0.50  # max tilt before termination
-    min_height: float = 0.10  # min height before termination [m] (currently unused)
