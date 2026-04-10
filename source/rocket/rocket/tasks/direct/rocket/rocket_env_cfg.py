@@ -244,7 +244,8 @@ class RocketEnvCfg(DirectRLEnvCfg):
 
     # spaces definition - UPDATED for 6 DOF robot
     action_space = 6  # 6 joints to control
-    observation_space = 20  # 6 joint pos + 4 stepper joint vel + 3 ang_vel + 3 lin_acc + 4 quat
+    observation_space = 18  # 4 stepper joint pos + 4 stepper joint vel + 3 ang_vel + 3 lin_acc + 4 quat
+                            # hip servo pos (R1/R2) excluded — no encoders on those joints
     state_space = 0
 
     # simulation

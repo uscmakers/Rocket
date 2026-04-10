@@ -164,7 +164,7 @@ class RocketEnv(DirectRLEnv):
 
         obs = torch.cat(
             (
-                self._add_obs_noise(self.joint_pos[:, self._joint_ids],         n.joint_pos_std),  # (6,)
+                self._add_obs_noise(self.joint_pos[:, self._stepper_joint_ids], n.joint_pos_std),  # (4,) stepper only — no encoders on hip servos (R1/R2)
                 self._add_obs_noise(self.joint_vel[:, self._stepper_joint_ids], n.joint_vel_std),  # (4,)
                 self._add_obs_noise(imu.ang_vel_b,                              n.ang_vel_std),    # (3,)
                 self._add_obs_noise(imu.lin_acc_b,                              n.lin_acc_std),    # (3,)
