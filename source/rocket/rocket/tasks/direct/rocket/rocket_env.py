@@ -146,11 +146,6 @@ class RocketEnv(DirectRLEnv):
         self.joint_vel = self.robot.data.joint_vel
         n = self.cfg.obs_noise
 
-        # Add gaussian noise to IMU signals to simulate real sensor noise
-        noise_std = self.cfg.dr_imu_noise_std
-        ang_vel_noisy = imu.ang_vel_b + noise_std * torch.randn_like(imu.ang_vel_b)
-        lin_acc_noisy = imu.lin_acc_b + noise_std * torch.randn_like(imu.lin_acc_b)
-
         obs = torch.cat(
             (
                 self._add_obs_noise(self.joint_pos[:, self._joint_ids],         n.joint_pos_std),  # (6,)
