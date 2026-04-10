@@ -17,6 +17,8 @@ from isaaclab.sensors import ContactSensorCfg, ImuCfg, TiledCameraCfg
 from isaaclab.sim import SimulationCfg, UrdfConverterCfg
 from isaaclab.utils import configclass
 
+from .reward_cfg import RewardCfg
+
 ##
 # Rocket Robot Configuration
 ##
@@ -285,71 +287,8 @@ class RocketEnvCfg(DirectRLEnvCfg):
     # determines which reward function and scales are used
     policy_type: str = "standing"
 
-    # reward scales - defaults match standing policy
-    rew_scale_alive: float = 5.0
-    rew_scale_terminated: float = -5.0
-    rew_scale_upright: float = 2.0
-    rew_scale_joint_vel: float = -0.05
-    rew_scale_torque: float = -0.1
-    rew_scale_lin_vel: float = -1.0      # penalize |forward_vel| — any horiz movement (standing)
-    rew_scale_forward_vel: float = 0.0   # reward signed forward vel (walking only)
-    rew_scale_lat_vel: float = -0.05
-    rew_scale_vertical_vel: float = -0.5  # penalize vertical bouncing (standing only)
-    rew_scale_target_standing_pose: float = 1.0
-    rew_scale_height: float = 1.0
-    rew_scale_toe_walking: float = 1.0  # reward toe ground contact, penalize calf ground contact
-    rew_scale_action_rate: float = -0.1   # penalize rapid action changes to reduce jitter
-    rew_scale_jerk: float = -0.05         # penalize second-order action changes (discrete jerk)
-    rew_scale_alternating_contact: float = 0.0  # reward alternating toe contact (walking only)
-
-    # reward scale presets (applied at env init based on policy_type)
-    standing_reward_scales = {
-        # --- survival ---
-        "rew_scale_alive":                5.0,
-        "rew_scale_terminated":          -5.0,
-        # --- balance ---
-        "rew_scale_upright":              3.0,
-        # --- locomotion constraints ---
-        "rew_scale_lin_vel":             -1.0,   # penalize |forward_vel| — any horiz movement
-        "rew_scale_forward_vel":          0.0,   # signed forward vel — zero for standing
-        "rew_scale_vertical_vel":        -1.0,   # penalize bouncing/jumping
-        "rew_scale_lat_vel":              0.0,   # lateral drift unlikely for small symmetric biped; enable if crabwalking observed
-        # --- contact quality ---
-        "rew_scale_toe_walking":          3.0,   # foot posture: toe contact > calf contact
-        "rew_scale_alternating_contact":  2.0,   # in-place stepping signal (continuous force imbalance)
-        # --- smoothness ---
-        "rew_scale_action_rate":         -0.2,   # penalize command changes (jitter)
-        "rew_scale_jerk":                -0.1,   # penalize oscillation action_rate misses
-        # --- zeroed: redundant or counter-productive for walking-in-place ---
-        "rew_scale_joint_vel":            0.0,   # redundant with action_rate in position control
-        "rew_scale_target_standing_pose": 0.0,   # fights gait learning; doesn't guarantee balance
-        "rew_scale_torque":               0.0,
-        "rew_scale_height":               0.0,
-    }
-
-    walking_reward_scales = {
-        # --- survival ---
-        "rew_scale_alive":                5.0,
-        "rew_scale_terminated":          -5.0,
-        # --- balance ---
-        "rew_scale_upright":              3.0,
-        # --- locomotion constraints ---
-        "rew_scale_lin_vel":              0.0,   # zero for walking — forward vel is rewarded instead
-        "rew_scale_forward_vel":          3.0,   # reward signed forward velocity
-        "rew_scale_vertical_vel":        -1.0,
-        "rew_scale_lat_vel":              0.0,
-        # --- contact quality ---
-        "rew_scale_toe_walking":          3.0,
-        "rew_scale_alternating_contact":  2.0,
-        # --- smoothness ---
-        "rew_scale_action_rate":         -0.2,
-        "rew_scale_jerk":                -0.1,
-        # --- zeroed ---
-        "rew_scale_joint_vel":            0.0,
-        "rew_scale_target_standing_pose": 0.0,
-        "rew_scale_torque":               0.0,
-        "rew_scale_height":               0.0,
-    }
+    # active reward config — set by policy_type at env init, or override directly
+    rewards: RewardCfg = RewardCfg()  # overwritten at env init from POLICIES[policy_type]
 
     # additional conditions
     target_height = 0.14 # at about 0.12 m, the robot is sitting

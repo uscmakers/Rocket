@@ -16,21 +16,18 @@ from isaaclab.utils.math import quat_apply
 from isaaclab.sensors import ContactSensor
 
 from .rocket_env_cfg import RocketEnvCfg
-from .rewards import compute_standing_rewards, compute_walking_rewards, rew_toe_walking_debug
+from .reward_cfg import POLICIES, RewardInput
 
 
 class RocketEnv(DirectRLEnv):
     cfg: RocketEnvCfg
 
     def __init__(self, cfg: RocketEnvCfg, render_mode: str | None = None, **kwargs):
-        # Apply policy-type reward scales before the env is fully initialised
+        # Apply policy-type reward config before the env is fully initialised
         self.policy_type = cfg.policy_type
-        if self.policy_type == "walking":
-            for k, v in cfg.walking_reward_scales.items():
-                setattr(cfg, k, v)
-        else:
-            for k, v in cfg.standing_reward_scales.items():
-                setattr(cfg, k, v)
+        if self.policy_type not in POLICIES:
+            raise ValueError(f"Unknown policy_type '{self.policy_type}'. Available: {list(POLICIES.keys())}")
+        cfg.rewards = POLICIES[self.policy_type]
         print(f"[RocketEnv] Policy type: {self.policy_type}")
 
         # Disable startup DR terms if flag is off (resets always remain active)
@@ -180,42 +177,23 @@ class RocketEnv(DirectRLEnv):
         return observations
 
     def _get_rewards(self) -> torch.Tensor:
-        reward_kwargs = dict(
-            rew_scale_alive=self.cfg.rew_scale_alive,
-            rew_scale_terminated=self.cfg.rew_scale_terminated,
-            rew_scale_upright=self.cfg.rew_scale_upright,
-            rew_scale_target_standing_pose=self.cfg.rew_scale_target_standing_pose,
-            rew_scale_joint_vel=self.cfg.rew_scale_joint_vel,
-            rew_scale_torque=self.cfg.rew_scale_torque,
-            rew_scale_lin_vel=self.cfg.rew_scale_lin_vel,
-            rew_scale_forward_vel=self.cfg.rew_scale_forward_vel,
-            rew_scale_lat_vel=self.cfg.rew_scale_lat_vel,
-            rew_scale_height=self.cfg.rew_scale_height,
-            rew_scale_toe_walking=self.cfg.rew_scale_toe_walking,
-            rew_scale_action_rate=self.cfg.rew_scale_action_rate,
-            rew_scale_vertical_vel=self.cfg.rew_scale_vertical_vel,
-            rew_scale_jerk=self.cfg.rew_scale_jerk,
-            rew_scale_alternating_contact=self.cfg.rew_scale_alternating_contact,
-            quat_w=self.imu.data.quat_w,
-            root_lin_vel_w=self.robot.data.root_lin_vel_w[:, :3],
-            joint_pos=self.joint_pos[:, self._joint_ids],
-            joint_vel=self.joint_vel[:, self._joint_ids],
-            actions=self.actions,
-            prev_actions=self.prev_actions,
-            prev_prev_actions=self.prev_prev_actions,
-            torques=self.robot.data.applied_torque[:, self._joint_ids],
-            reset_terminated=self.reset_terminated,
-            target_standing_pose=self.target_standing_pose,
-            z_height=self.robot.data.root_pos_w[:, 2],
-            calf_forces=self.contact_sensor_calves.data.net_forces_w,
-            toe_forces=self.contact_sensor_toes.data.net_forces_w,
+        inputs = RewardInput(
+            quat_w               = self.imu.data.quat_w,
+            root_lin_vel_w       = self.robot.data.root_lin_vel_w[:, :3],
+            joint_pos            = self.joint_pos[:, self._joint_ids],
+            joint_vel            = self.joint_vel[:, self._joint_ids],
+            actions              = self.actions,
+            prev_actions         = self.prev_actions,
+            prev_prev_actions    = self.prev_prev_actions,
+            torques              = self.robot.data.applied_torque[:, self._joint_ids],
+            reset_terminated     = self.reset_terminated,
+            target_standing_pose = self.target_standing_pose,
+            z_height             = self.robot.data.root_pos_w[:, 2],
+            calf_forces          = self.contact_sensor_calves.data.net_forces_w,
+            toe_forces           = self.contact_sensor_toes.data.net_forces_w,
         )
-        # rew_toe_walking_debug(reward_kwargs["calf_forces"], reward_kwargs["toe_forces"])
 
-        if self.policy_type == "walking":
-            total_reward, components = compute_walking_rewards(**reward_kwargs)
-        else:
-            total_reward, components = compute_standing_rewards(**reward_kwargs)
+        total_reward, components = self.cfg.rewards.compute(inputs)
 
         self.extras["log"].update({
             f"rewards/{k}": v.mean().item() for k, v in components.items()
