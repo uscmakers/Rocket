@@ -32,7 +32,7 @@ else
 fi
 
 TRAIN_ARGS=(
-    --max_iterations 300
+    --max_iterations 500
     
     --track
     --wandb-entity rocket-babysitters 

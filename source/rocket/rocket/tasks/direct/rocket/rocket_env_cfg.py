@@ -60,7 +60,7 @@ ROCKET_CFG = ArticulationCfg(
         ),
         "knee_steppers": ImplicitActuatorCfg(
             joint_names_expr=["Revolute5", "Revolute6"],
-            effort_limit=6,
+            effort_limit=5,
             velocity_limit=6.2,
             stiffness=200.0,
             damping=10.0,
@@ -242,7 +242,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
     # set to False to disable all startup domain randomization (mass, gains, COM, friction).
     # reset_root_state and reset_joints are always active regardless of this flag.
     # recommended workflow: train without DR first, then enable once policy is stable.
-    enable_domain_randomization: bool = True
+    enable_domain_randomization: bool = False
 
     # spaces definition - UPDATED for 6 DOF robot
     action_space = 6  # 6 joints to control
