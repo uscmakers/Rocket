@@ -33,6 +33,16 @@ class RocketEnv(DirectRLEnv):
                 setattr(cfg, k, v)
         print(f"[RocketEnv] Policy type: {self.policy_type}")
 
+        # Disable startup DR terms if flag is off (resets always remain active)
+        if not cfg.enable_domain_randomization:
+            cfg.events.randomize_mass = None
+            cfg.events.randomize_actuator_gains = None
+            cfg.events.randomize_com = None
+            cfg.events.randomize_foot_friction = None
+            print("[RocketEnv] Domain randomization DISABLED")
+        else:
+            print("[RocketEnv] Domain randomization ENABLED")
+
         super().__init__(cfg, render_mode, **kwargs)
 
         # Find joint indices by group

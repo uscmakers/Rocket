@@ -140,7 +140,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot"),
-            "mass_distribution_params": (0.95, 1.15),  # skewed high: parts likely heavier than URDF model
+            "mass_distribution_params": (1.0, 1.15),  # skewed high: parts likely heavier than URDF model
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -236,6 +236,11 @@ class RocketEnvCfg(DirectRLEnvCfg):
     # env
     decimation = 2
     episode_length_s = 10.0
+
+    # set to False to disable all startup domain randomization (mass, gains, COM, friction).
+    # reset_root_state and reset_joints are always active regardless of this flag.
+    # recommended workflow: train without DR first, then enable once policy is stable.
+    enable_domain_randomization: bool = False
 
     # spaces definition - UPDATED for 6 DOF robot
     action_space = 6  # 6 joints to control

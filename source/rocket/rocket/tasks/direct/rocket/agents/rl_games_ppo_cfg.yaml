@@ -30,7 +30,7 @@ params:
           val: 0
         fixed_sigma: True
     mlp:
-      units: [512, 256, 128]
+      units: [256, 128, 64]
       activation: elu
       d2rl: False
 
@@ -60,7 +60,7 @@ params:
     tau : 0.95
     learning_rate: 5e-4
     lr_schedule: adaptive
-    kl_threshold: 0.016       # was 0.008 — too tight; shrinks LR too aggressively, slows convergence
+    kl_threshold: 0.008
     score_to_win: 50000
     max_epochs: 1500          # was 500 — biped standing from scratch needs 1000-2000 epochs
     save_best_after: 50
@@ -72,7 +72,7 @@ params:
     horizon_length: 64        # was 32 (~0.53s) — too short for balance credit assignment; 64 = ~1.07s
     minibatch_size: 16384
     mini_epochs: 8
-    critic_coef: 2            # was 4 — high critic_coef destabilizes shared actor/critic network
+    critic_coef: 1            # matches RSL-RL biped consensus (H1, G1, ANYmal, Cassie all use 1.0)
     clip_value: True
     seq_length: 4
     bounds_loss_coef: 0.0001
