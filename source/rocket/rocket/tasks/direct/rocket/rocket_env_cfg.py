@@ -291,7 +291,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
     rew_scale_upright: float = 2.0
     rew_scale_joint_vel: float = -0.05
     rew_scale_torque: float = -0.1
-    rew_scale_lin_vel: float = -0.05
+    rew_scale_forward_vel: float = -0.05
     rew_scale_lat_vel: float = -0.05
     rew_scale_vertical_vel: float = -0.5  # penalize vertical bouncing (standing only)
     rew_scale_target_standing_pose: float = 1.0
@@ -309,7 +309,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
         # --- balance ---
         "rew_scale_upright":              3.0,
         # --- locomotion constraints ---
-        "rew_scale_lin_vel":             -1.0,   # penalize forward/backward drift only
+        "rew_scale_forward_vel":             -1.0,   # penalize forward/backward drift only
         "rew_scale_vertical_vel":        -1.0,   # penalize bouncing/jumping
         "rew_scale_lat_vel":              0.0,   # lateral drift unlikely for small symmetric biped; enable if crabwalking observed
         # --- contact quality ---
@@ -331,7 +331,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
         "rew_scale_upright":              2.0,
         "rew_scale_joint_vel":            0.0,
         "rew_scale_torque":               0.0,
-        "rew_scale_lin_vel":              4.0,   # positive = reward forward x-velocity
+        "rew_scale_forward_vel":              4.0,   # positive = reward forward x-velocity
         "rew_scale_lat_vel":             -0.05,  # penalize lateral drift
         "rew_scale_target_standing_pose": 0.0,   # light posture encouragement
         "rew_scale_height":               2.0,   # stay off the ground
