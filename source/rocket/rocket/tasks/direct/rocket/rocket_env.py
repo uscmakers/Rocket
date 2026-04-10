@@ -12,9 +12,8 @@ import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
-from isaaclab.utils.math import sample_uniform, quat_apply, quat_inv
-from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import ImuCfg, ContactSensor
+from isaaclab.utils.math import quat_apply
+from isaaclab.sensors import ContactSensor
 
 from .rocket_env_cfg import RocketEnvCfg
 from .rewards import compute_standing_rewards, compute_walking_rewards, rew_toe_walking_debug
@@ -66,11 +65,8 @@ class RocketEnv(DirectRLEnv):
         print(f"Joint position mid: {self.joint_pos_mid[0]}")
         print(f"Joint position scale: {self.joint_pos_range[0]}")
 
-        # Calculate the target standing pose (servos should be at 0 degrees, steppers should be at their negative limit to rep 45 deg limit)
-        target_pos = torch.zeros(1, len(self._joint_ids), device=self.device)
-        # stepper_indices = [self._joint_ids.index(j) for j in self._stepper_joint_ids]
-        # target_pos[:, stepper_indices] = self.robot.data.soft_joint_pos_limits[:1, self._stepper_joint_ids, 0]
-        self.target_standing_pose = target_pos  # (1, num_joints) broadcasts over envs
+        # Target standing pose: all joints at 0 (broadcasts over envs via shape (1, num_joints))
+        self.target_standing_pose = torch.zeros(1, len(self._joint_ids), device=self.device)
 
         self.prev_actions      = torch.zeros(self.num_envs, self.cfg.action_space, device=self.device)
         self.prev_prev_actions = torch.zeros(self.num_envs, self.cfg.action_space, device=self.device)
@@ -138,10 +134,17 @@ class RocketEnv(DirectRLEnv):
         self.prev_prev_actions[:] = self.prev_actions
         self.prev_actions[:] = self.actions
 
+    def _add_obs_noise(self, x: torch.Tensor, std: float) -> torch.Tensor:
+        """Add zero-mean Gaussian noise to an observation tensor. No-op if std is 0."""
+        if std == 0.0:
+            return x
+        return x + std * torch.randn_like(x)
+
     def _get_observations(self) -> dict:
         imu = self.imu.data
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
+        n = self.cfg.obs_noise
 
         # Add gaussian noise to IMU signals to simulate real sensor noise
         noise_std = self.cfg.dr_imu_noise_std
@@ -150,11 +153,11 @@ class RocketEnv(DirectRLEnv):
 
         obs = torch.cat(
             (
-                self.joint_pos[:, self._joint_ids],          # (6,) all joint positions
-                self.joint_vel[:, self._stepper_joint_ids],  # (4,) stepper joint velocities only
-                ang_vel_noisy,                               # (3,) angular velocity + noise
-                lin_acc_noisy,                               # (3,) linear acceleration + noise
-                imu.quat_w,                                  # (4,) orientation quaternion
+                self._add_obs_noise(self.joint_pos[:, self._joint_ids],         n.joint_pos_std),  # (6,)
+                self._add_obs_noise(self.joint_vel[:, self._stepper_joint_ids], n.joint_vel_std),  # (4,)
+                self._add_obs_noise(imu.ang_vel_b,                              n.ang_vel_std),    # (3,)
+                self._add_obs_noise(imu.lin_acc_b,                              n.lin_acc_std),    # (3,)
+                self._add_obs_noise(imu.quat_w,                                 n.quat_std),       # (4,)
             ),
             dim=-1,
         )
@@ -205,9 +208,6 @@ class RocketEnv(DirectRLEnv):
         return total_reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
-        self.joint_pos = self.robot.data.joint_pos
-        self.joint_vel = self.robot.data.joint_vel
-
         time_out = self.episode_length_buf >= self.max_episode_length - 1
 
         imu = self.imu.data
@@ -246,66 +246,6 @@ class RocketEnv(DirectRLEnv):
     def _reset_idx(self, env_ids: Sequence[int] | None):
         if env_ids is None:
             env_ids = self.robot._ALL_INDICES
+        # EventManager (configured in EventCfg) handles all reset randomization:
+        # joint offsets, root state, and any startup/interval terms.
         super()._reset_idx(env_ids)
-
-        joint_pos = self.robot.data.default_joint_pos[env_ids]
-        # Randomize all joint positions slightly
-        joint_pos[:, self._joint_ids] += sample_uniform(
-            self.cfg.initial_joint_range[0],
-            self.cfg.initial_joint_range[1],
-            joint_pos[:, self._joint_ids].shape,
-            joint_pos.device,
-        )
-        joint_vel = self.robot.data.default_joint_vel[env_ids]
-
-        default_root_state = self.robot.data.default_root_state[env_ids]
-        default_root_state[:, :3] += self.scene.env_origins[env_ids]
-
-        # Randomize spawn height slightly
-        default_root_state[:, 2] += sample_uniform(
-            -0.01, 0.01,
-            (len(env_ids),),
-            default_root_state.device
-        )
-
-        self.joint_pos[env_ids] = joint_pos
-        self.joint_vel[env_ids] = joint_vel
-        self.prev_actions[env_ids]      = 0.0
-        self.prev_prev_actions[env_ids] = 0.0
-
-        self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
-        self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
-        self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
-
-        # --- Domain randomization ---
-        num_reset = len(env_ids)
-        num_joints = len(self._joint_ids)
-
-        # Stiffness: per-env per-joint multiplier
-        default_stiffness = self.robot.data.default_joint_stiffness[env_ids][:, self._joint_ids]
-        stiffness_mult = sample_uniform(
-            self.cfg.dr_stiffness_range[0], self.cfg.dr_stiffness_range[1],
-            (num_reset, num_joints), self.device
-        )
-        self.robot.write_joint_stiffness_to_sim(
-            default_stiffness * stiffness_mult, joint_ids=self._joint_ids, env_ids=env_ids
-        )
-
-        # Damping: per-env per-joint multiplier
-        default_damping = self.robot.data.default_joint_damping[env_ids][:, self._joint_ids]
-        damping_mult = sample_uniform(
-            self.cfg.dr_damping_range[0], self.cfg.dr_damping_range[1],
-            (num_reset, num_joints), self.device
-        )
-        self.robot.write_joint_damping_to_sim(
-            default_damping * damping_mult, joint_ids=self._joint_ids, env_ids=env_ids
-        )
-
-        # Joint friction: per-env per-joint additive
-        joint_friction = sample_uniform(
-            self.cfg.dr_joint_friction_range[0], self.cfg.dr_joint_friction_range[1],
-            (num_reset, num_joints), self.device
-        )
-        self.robot.write_joint_friction_coefficient_to_sim(
-            joint_friction, joint_ids=self._joint_ids, env_ids=env_ids
-        )
