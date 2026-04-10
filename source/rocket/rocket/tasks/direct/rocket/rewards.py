@@ -177,7 +177,8 @@ def compute_standing_rewards(
     rew_scale_target_standing_pose: float,
     rew_scale_joint_vel: float,
     rew_scale_torque: float,
-    rew_scale_forward_vel: float,
+    rew_scale_lin_vel: float,       # penalize any horizontal movement |forward_vel| (standing)
+    rew_scale_forward_vel: float,   # reward signed forward velocity (set to 0 in standing)
     rew_scale_lat_vel: float,
     rew_scale_height: float,
     rew_scale_toe_walking: float,
@@ -214,9 +215,9 @@ def compute_standing_rewards(
     rew_jerk_r         = rew_scale_jerk              * rew_jerk_penalty(actions, prev_actions, prev_prev_actions)
     rew_alt_contact_r  = rew_scale_alternating_contact * rew_alternating_contact(toe_forces)
 
-    # Penalize horizontal movement in both directions equally (abs so backward motion isn't rewarded)
     forward_vel, lateral_vel = rew_heading_vel(quat_w, root_lin_vel_w)
-    rew_forward_vel_r = rew_scale_forward_vel * torch.abs(forward_vel)
+    rew_lin_vel_r     = rew_scale_lin_vel     * torch.abs(forward_vel)   # |forward| — penalizes any horiz movement
+    rew_forward_vel_r = rew_scale_forward_vel * forward_vel              # signed — set to 0 in standing
     rew_lat_vel_r     = rew_scale_lat_vel     * torch.abs(lateral_vel)
 
     # Per-joint-group pose error for diagnostics
@@ -225,7 +226,7 @@ def compute_standing_rewards(
     knee_pose_error     = torch.abs(joint_pos[:, 4:6] - target_standing_pose[:, 4:6]).mean(dim=-1)
 
     total_reward = (
-        rew_alive + rew_terminated + rew_up + rew_forward_vel_r + rew_lat_vel_r
+        rew_alive + rew_terminated + rew_up + rew_lin_vel_r + rew_forward_vel_r + rew_lat_vel_r
         + rew_jvel + rew_torque_r + rew_pose_r + rew_height_r + rew_toe_r
         + rew_action_rate_r + rew_vertical_vel_r + rew_jerk_r + rew_alt_contact_r
     )
@@ -234,6 +235,7 @@ def compute_standing_rewards(
         "alive":                rew_alive,
         "termination":          rew_terminated,
         "upright":              rew_up,
+        "lin_vel":              rew_lin_vel_r,
         "forward_vel":          rew_forward_vel_r,
         "lateral_vel":          rew_lat_vel_r,
         "joint_vel":            rew_jvel,
@@ -265,7 +267,8 @@ def compute_walking_rewards(
     rew_scale_target_standing_pose: float,
     rew_scale_joint_vel: float,
     rew_scale_torque: float,
-    rew_scale_forward_vel: float,
+    rew_scale_lin_vel: float,       # |forward_vel| penalty — set to 0 in walking
+    rew_scale_forward_vel: float,   # signed forward reward (positive in walking)
     rew_scale_lat_vel: float,
     rew_scale_height: float,
     rew_scale_toe_walking: float,
@@ -302,13 +305,13 @@ def compute_walking_rewards(
     rew_alt_contact_r    = rew_scale_alternating_contact * rew_alternating_contact(toe_forces)
     rew_vertical_vel_r   = rew_scale_vertical_vel      * rew_vertical_vel_penalty(root_lin_vel_w)
 
-    # Forward reward + lateral penalty in the robot's heading frame
     forward_vel, lateral_vel = rew_heading_vel(quat_w, root_lin_vel_w)
+    rew_lin_vel_r     = rew_scale_lin_vel     * torch.abs(forward_vel)  # set to 0 in walking
     rew_forward_vel_r = rew_scale_forward_vel * forward_vel
     rew_lat_vel_r     = rew_scale_lat_vel     * torch.square(lateral_vel)
 
     total_reward = (
-        rew_alive + rew_terminated + rew_up + rew_forward_vel_r + rew_lat_vel_r
+        rew_alive + rew_terminated + rew_up + rew_lin_vel_r + rew_forward_vel_r + rew_lat_vel_r
         + rew_height_r + rew_pose_r + rew_jvel + rew_torque_r + rew_toe_r
         + rew_action_rate_r + rew_jerk_r + rew_alt_contact_r + rew_vertical_vel_r
     )
@@ -317,6 +320,7 @@ def compute_walking_rewards(
         "alive":                rew_alive,
         "termination":          rew_terminated,
         "upright":              rew_up,
+        "lin_vel":              rew_lin_vel_r,
         "forward_vel":          rew_forward_vel_r,
         "lat_vel":              rew_lat_vel_r,
         "height":               rew_height_r,

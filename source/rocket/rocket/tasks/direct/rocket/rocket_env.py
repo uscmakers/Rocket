@@ -187,6 +187,7 @@ class RocketEnv(DirectRLEnv):
             rew_scale_target_standing_pose=self.cfg.rew_scale_target_standing_pose,
             rew_scale_joint_vel=self.cfg.rew_scale_joint_vel,
             rew_scale_torque=self.cfg.rew_scale_torque,
+            rew_scale_lin_vel=self.cfg.rew_scale_lin_vel,
             rew_scale_forward_vel=self.cfg.rew_scale_forward_vel,
             rew_scale_lat_vel=self.cfg.rew_scale_lat_vel,
             rew_scale_height=self.cfg.rew_scale_height,
