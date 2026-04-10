@@ -140,7 +140,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot"),
-            "mass_distribution_params": (0.85, 1.15),  # ±15% of URDF mass per body
+            "mass_distribution_params": (0.95, 1.15),  # skewed high: parts likely heavier than URDF model
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -152,8 +152,8 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "stiffness_distribution_params": (0.75, 1.25),  # ±25%
-            "damping_distribution_params": (0.75, 1.25),
+            "stiffness_distribution_params": (0.90, 1.10),  # ±10% (was ±25% — too aggressive for early training)
+            "damping_distribution_params": (0.90, 1.10),
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -162,6 +162,17 @@ class EventCfg:
     # -------------------------------------------------------------------------
     # HIGH IMPACT — reset (applied every episode; encourages diverse initial states)
     # -------------------------------------------------------------------------
+
+    # Resets root pose to default (applies env grid origins) and zeroes velocity.
+    # Required — without this the robot body stays wherever it fell after termination.
+    reset_root_state = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "pose_range": {},     # no randomization, pure reset to URDF init_state + env origin
+            "velocity_range": {},
+        },
+    )
 
     # Joint position noise prevents the policy from overfitting to a single start pose.
     reset_joints = EventTerm(
@@ -177,15 +188,16 @@ class EventCfg:
     # MEDIUM IMPACT — interval (applied periodically during an episode)
     # -------------------------------------------------------------------------
 
-    # Random velocity pushes force the policy to learn active balance recovery.
-    push_robot = EventTerm(
-        func=mdp.push_by_setting_velocity,
-        mode="interval",
-        interval_range_s=(3.0, 6.0),
-        params={
-            "velocity_range": {"x": (-0.2, 0.2), "y": (-0.2, 0.2)},
-        },
-    )
+    # Disabled: all Isaac Lab biped configs (Cassie, H1, G1) disable push randomization —
+    # it destabilizes training before a stable gait is learned. Re-enable at ±0.1 m/s
+    # once the policy can stand/walk reliably.
+    push_robot = None
+    # push_robot = EventTerm(
+    #     func=mdp.push_by_setting_velocity,
+    #     mode="interval",
+    #     interval_range_s=(3.0, 6.0),
+    #     params={"velocity_range": {"x": (-0.1, 0.1), "y": (-0.1, 0.1)}},  # scaled down for small biped
+    # )
 
     # -------------------------------------------------------------------------
     # MEDIUM IMPACT — startup (manufacturing shifts center of mass)
@@ -211,9 +223,9 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="Toe_.*"),
-            "static_friction_range": (0.5, 1.5),
-            "dynamic_friction_range": (0.5, 1.0),
-            "restitution_range": (0.0, 0.1),
+            "static_friction_range": (0.5, 1.0),   # moderate (0.5) → carpet (1.0); 0.3 too slippery for standing
+            "dynamic_friction_range": (0.4, 0.8),  # always lower than static
+            "restitution_range": (0.0, 0.0),        # real floors don't bounce
             "num_buckets": 64,
         },
     )
@@ -234,7 +246,11 @@ class RocketEnvCfg(DirectRLEnvCfg):
     sim: SimulationCfg = SimulationCfg(
         dt=1 / 120,
         render_interval=decimation,
-        # device="cuda" if torch.cuda.is_available() else "cpu",
+        physics_material=sim_utils.RigidBodyMaterialCfg(
+            static_friction=1.0,
+            dynamic_friction=1.0,
+            restitution=0.0,
+        ),
     )
 
     # robot - UPDATED to use ROCKET_CFG
@@ -284,7 +300,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
         "rew_scale_alive":                5.0,
         "rew_scale_terminated":           -5.0,
         "rew_scale_upright":              3.0,
-        "rew_scale_joint_vel":           -1.5,
+        "rew_scale_joint_vel":           -0.05,  # was -1.5 — penalty of -55 dwarfed all positive rewards
         "rew_scale_torque":              -0.0,
         "rew_scale_lin_vel":             -1.0,
         "rew_scale_lat_vel":             -0.0,
