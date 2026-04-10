@@ -69,13 +69,15 @@ def rew_toe_walking(
 def rew_alternating_contact(
     toe_forces: torch.Tensor,  # (N, 2, 3)
 ) -> torch.Tensor:
-    """Rewards alternating foot contact (one toe down, one toe up).
+    """Rewards alternating foot contact via continuous force imbalance.
 
-    Returns (N,) in [0, 1]; 1.0 = exactly one foot on ground.
+    Returns (N,) in [0, 1]; 1.0 = all weight on one foot, 0.0 = equal weight on both.
+    Continuous normalization provides gradient signal throughout, unlike the binary
+    threshold approach which returns 0 for near-alternating and 1 for barely-alternating.
     """
-    toe_mag = torch.norm(toe_forces, dim=-1)      # (N, 2)
-    contact = (toe_mag > 0.1).float()             # (N, 2) binary
-    return torch.abs(contact[:, 0] - contact[:, 1])
+    toe_mag = torch.norm(toe_forces, dim=-1)               # (N, 2)
+    total = toe_mag.sum(dim=-1).clamp(min=1e-6)            # (N,)
+    return torch.abs(toe_mag[:, 0] - toe_mag[:, 1]) / total
 
 
 @torch.jit.script

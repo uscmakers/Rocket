@@ -303,20 +303,26 @@ class RocketEnvCfg(DirectRLEnvCfg):
 
     # reward scale presets (applied at env init based on policy_type)
     standing_reward_scales = {
+        # --- survival ---
         "rew_scale_alive":                5.0,
-        "rew_scale_terminated":           -5.0,
+        "rew_scale_terminated":          -5.0,
+        # --- balance ---
         "rew_scale_upright":              3.0,
-        "rew_scale_joint_vel":           -0.05,  # was -1.5 — penalty of -55 dwarfed all positive rewards
-        "rew_scale_torque":              -0.0,
-        "rew_scale_lin_vel":             -1.0,
-        "rew_scale_lat_vel":             -0.0,
-        "rew_scale_target_standing_pose": 2.0,
+        # --- locomotion constraints ---
+        "rew_scale_lin_vel":             -1.0,   # penalize forward/backward drift only
+        "rew_scale_vertical_vel":        -1.0,   # penalize bouncing/jumping
+        "rew_scale_lat_vel":              0.0,   # lateral drift unlikely for small symmetric biped; enable if crabwalking observed
+        # --- contact quality ---
+        "rew_scale_toe_walking":          3.0,   # foot posture: toe contact > calf contact
+        "rew_scale_alternating_contact":  2.0,   # in-place stepping signal (continuous force imbalance)
+        # --- smoothness ---
+        "rew_scale_action_rate":         -0.2,   # penalize command changes (jitter)
+        "rew_scale_jerk":                -0.1,   # penalize oscillation action_rate misses
+        # --- zeroed: redundant or counter-productive for walking-in-place ---
+        "rew_scale_joint_vel":            0.0,   # redundant with action_rate in position control
+        "rew_scale_target_standing_pose": 0.0,   # fights gait learning; doesn't guarantee balance
+        "rew_scale_torque":               0.0,
         "rew_scale_height":               0.0,
-        "rew_scale_toe_walking":          3.0,
-        "rew_scale_action_rate":         -0.1,
-        "rew_scale_vertical_vel":        -1.0,
-        "rew_scale_jerk":                -0.1,
-        "rew_scale_alternating_contact":  0.0,
     }
 
     walking_reward_scales = {
