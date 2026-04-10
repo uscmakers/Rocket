@@ -78,6 +78,7 @@ class RocketEnv(DirectRLEnv):
         # Target standing pose: all joints at 0 (broadcasts over envs via shape (1, num_joints))
         self.target_standing_pose = torch.zeros(1, len(self._joint_ids), device=self.device)
 
+        self.actions           = torch.zeros(self.num_envs, self.cfg.action_space, device=self.device)
         self.prev_actions      = torch.zeros(self.num_envs, self.cfg.action_space, device=self.device)
         self.prev_prev_actions = torch.zeros(self.num_envs, self.cfg.action_space, device=self.device)
 
@@ -130,6 +131,11 @@ class RocketEnv(DirectRLEnv):
         light_cfg.func("/World/Light", light_cfg)
 
     def _pre_physics_step(self, actions: torch.Tensor) -> None:
+        # Update action history before overwriting self.actions.
+        # Must be here (called once per env step), NOT in _apply_action
+        # which is called decimation times and would corrupt the history.
+        self.prev_prev_actions[:] = self.prev_actions
+        self.prev_actions[:] = self.actions
         self.actions = actions.clone()
 
         self.scene.update(dt=self.physics_dt)
@@ -147,8 +153,6 @@ class RocketEnv(DirectRLEnv):
 
         # we control all joints in position control mode in isaac sim (delta pos in real life)
         self.robot.set_joint_position_target(target_joint_pos, joint_ids=self._joint_ids)
-        self.prev_prev_actions[:] = self.prev_actions
-        self.prev_actions[:] = self.actions
 
     def _add_obs_noise(self, x: torch.Tensor, std: float) -> torch.Tensor:
         """Add zero-mean Gaussian noise to an observation tensor. No-op if std is 0."""
@@ -260,3 +264,7 @@ class RocketEnv(DirectRLEnv):
         # EventManager (configured in EventCfg) handles all reset randomization:
         # joint offsets, root state, and any startup/interval terms.
         super()._reset_idx(env_ids)
+        # Clear action history so jerk/action_rate penalties are not contaminated
+        # by actions from the previous episode on the first step of a new episode.
+        self.prev_actions[env_ids] = 0.0
+        self.prev_prev_actions[env_ids] = 0.0
