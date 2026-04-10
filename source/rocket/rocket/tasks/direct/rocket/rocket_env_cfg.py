@@ -237,6 +237,11 @@ class RocketEnvCfg(DirectRLEnvCfg):
     decimation = 2
     episode_length_s = 10.0
 
+    # set to False to disable all startup domain randomization (mass, gains, COM, friction).
+    # reset_root_state and reset_joints are always active regardless of this flag.
+    # recommended workflow: train without DR first, then enable once policy is stable.
+    enable_domain_randomization: bool = False
+
     # spaces definition - UPDATED for 6 DOF robot
     action_space = 6  # 6 joints to control
     observation_space = 20  # 6 joint pos + 4 stepper joint vel + 3 ang_vel + 3 lin_acc + 4 quat
