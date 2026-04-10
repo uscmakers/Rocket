@@ -246,6 +246,7 @@ def compute_standing_rewards(
         "knee_pose_error":      knee_pose_error,
         "height":               rew_height_r,
         "toe_walking":          rew_toe_r,
+        "alternating_contact":  rew_alt_contact_r,
         "action_rate":          rew_action_rate_r,
         "vertical_vel":         rew_vertical_vel_r,
         "jerk":                 rew_jerk_r,
@@ -301,6 +302,7 @@ def compute_walking_rewards(
     rew_action_rate_r    = rew_scale_action_rate       * rew_action_rate_penalty(actions, prev_actions)
     rew_jerk_r           = rew_scale_jerk              * rew_jerk_penalty(actions, prev_actions, prev_prev_actions)
     rew_alt_contact_r    = rew_scale_alternating_contact * rew_alternating_contact(toe_forces)
+    rew_vertical_vel_r   = rew_scale_vertical_vel      * rew_vertical_vel_penalty(root_lin_vel_w)
 
     # Forward reward + lateral penalty in the robot's heading frame
     forward_vel, lateral_vel = rew_heading_vel(quat_w, root_lin_vel_w)
@@ -309,7 +311,7 @@ def compute_walking_rewards(
     total_reward = (
         rew_alive + rew_terminated + rew_up + rew_lin_vel
         + rew_height_r + rew_pose_r + rew_jvel + rew_torque_r + rew_toe_r
-        + rew_action_rate_r + rew_jerk_r + rew_alt_contact_r
+        + rew_action_rate_r + rew_jerk_r + rew_alt_contact_r + rew_vertical_vel_r
     )
 
     components: dict[str, torch.Tensor] = {
@@ -324,9 +326,10 @@ def compute_walking_rewards(
         "joint_vel":            rew_jvel,
         "torque":               rew_torque_r,
         "toe_walking":          rew_toe_r,
-        "action_rate":          rew_action_rate_r,
-        "jerk":                 rew_jerk_r,
         "alternating_contact":  rew_alt_contact_r,
+        "action_rate":          rew_action_rate_r,
+        "vertical_vel":         rew_vertical_vel_r,
+        "jerk":                 rew_jerk_r,
     }
 
     return total_reward, components
