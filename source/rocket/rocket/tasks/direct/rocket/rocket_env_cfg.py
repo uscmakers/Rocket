@@ -163,6 +163,17 @@ class EventCfg:
     # HIGH IMPACT — reset (applied every episode; encourages diverse initial states)
     # -------------------------------------------------------------------------
 
+    # Resets root pose to default (applies env grid origins) and zeroes velocity.
+    # Required — without this the robot body stays wherever it fell after termination.
+    reset_root_state = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "pose_range": {},     # no randomization, pure reset to URDF init_state + env origin
+            "velocity_range": {},
+        },
+    )
+
     # Joint position noise prevents the policy from overfitting to a single start pose.
     reset_joints = EventTerm(
         func=mdp.reset_joints_by_offset,
