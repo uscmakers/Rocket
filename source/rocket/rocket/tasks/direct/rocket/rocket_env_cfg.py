@@ -328,21 +328,27 @@ class RocketEnvCfg(DirectRLEnvCfg):
     }
 
     walking_reward_scales = {
+        # --- survival ---
         "rew_scale_alive":                5.0,
         "rew_scale_terminated":          -5.0,
-        "rew_scale_upright":              2.0,
+        # --- balance ---
+        "rew_scale_upright":              3.0,
+        # --- locomotion constraints ---
+        "rew_scale_lin_vel":              0.0,   # zero for walking — forward vel is rewarded instead
+        "rew_scale_forward_vel":          3.0,   # reward signed forward velocity
+        "rew_scale_vertical_vel":        -1.0,
+        "rew_scale_lat_vel":              0.0,
+        # --- contact quality ---
+        "rew_scale_toe_walking":          3.0,
+        "rew_scale_alternating_contact":  2.0,
+        # --- smoothness ---
+        "rew_scale_action_rate":         -0.2,
+        "rew_scale_jerk":                -0.1,
+        # --- zeroed ---
         "rew_scale_joint_vel":            0.0,
+        "rew_scale_target_standing_pose": 0.0,
         "rew_scale_torque":               0.0,
-        "rew_scale_lin_vel":              0.0,   # |forward| penalty — zero for walking
-        "rew_scale_forward_vel":          4.0,   # signed forward vel reward
-        "rew_scale_lat_vel":             -0.05,  # penalize lateral drift
-        "rew_scale_target_standing_pose": 0.0,   # light posture encouragement
-        "rew_scale_height":               2.0,   # stay off the ground
-        "rew_scale_toe_walking":          2.0,
-        "rew_scale_action_rate":         -0.1,
-        "rew_scale_vertical_vel":         0.0,  # not penalized during walking
-        "rew_scale_jerk":                -0.05,
-        "rew_scale_alternating_contact":  1.0,  # reward alternating gait
+        "rew_scale_height":               0.0,
     }
 
     # additional conditions
