@@ -60,19 +60,19 @@ params:
     tau : 0.95
     learning_rate: 5e-4
     lr_schedule: adaptive
-    kl_threshold: 0.008
+    kl_threshold: 0.016       # was 0.008 — too tight; shrinks LR too aggressively, slows convergence
     score_to_win: 50000
-    max_epochs: 500
+    max_epochs: 1500          # was 500 — biped standing from scratch needs 1000-2000 epochs
     save_best_after: 50
     save_frequency: 25
     grad_norm: 1.0
-    entropy_coef: 0.0
+    entropy_coef: 0.001       # was 0.0 — small entropy bonus prevents premature collapse during hard balance init
     truncate_grads: True
     e_clip: 0.2
-    horizon_length: 32
+    horizon_length: 64        # was 32 (~0.53s) — too short for balance credit assignment; 64 = ~1.07s
     minibatch_size: 16384
     mini_epochs: 8
-    critic_coef: 4
+    critic_coef: 2            # was 4 — high critic_coef destabilizes shared actor/critic network
     clip_value: True
     seq_length: 4
     bounds_loss_coef: 0.0001

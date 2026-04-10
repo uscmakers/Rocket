@@ -140,7 +140,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot"),
-            "mass_distribution_params": (0.85, 1.15),  # ±15% of URDF mass per body
+            "mass_distribution_params": (0.95, 1.15),  # skewed high: parts likely heavier than URDF model
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -152,8 +152,8 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "stiffness_distribution_params": (0.75, 1.25),  # ±25%
-            "damping_distribution_params": (0.75, 1.25),
+            "stiffness_distribution_params": (0.90, 1.10),  # ±10% (was ±25% — too aggressive for early training)
+            "damping_distribution_params": (0.90, 1.10),
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -223,8 +223,8 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="Toe_.*"),
-            "static_friction_range": (0.3, 1.0),   # tile (0.3) → carpet (1.0), ref: Spot config
-            "dynamic_friction_range": (0.2, 0.8),  # always lower than static
+            "static_friction_range": (0.5, 1.0),   # moderate (0.5) → carpet (1.0); 0.3 too slippery for standing
+            "dynamic_friction_range": (0.4, 0.8),  # always lower than static
             "restitution_range": (0.0, 0.0),        # real floors don't bounce
             "num_buckets": 64,
         },
@@ -300,7 +300,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
         "rew_scale_alive":                5.0,
         "rew_scale_terminated":           -5.0,
         "rew_scale_upright":              3.0,
-        "rew_scale_joint_vel":           -1.5,
+        "rew_scale_joint_vel":           -0.05,  # was -1.5 — penalty of -55 dwarfed all positive rewards
         "rew_scale_torque":              -0.0,
         "rew_scale_lin_vel":             -1.0,
         "rew_scale_lat_vel":             -0.0,
