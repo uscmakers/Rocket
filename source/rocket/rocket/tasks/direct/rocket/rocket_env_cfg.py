@@ -205,13 +205,12 @@ class EventCfg:
     # MEDIUM IMPACT — startup (manufacturing shifts center of mass)
     # -------------------------------------------------------------------------
 
-    # COM offsets model asymmetric mass distribution from wiring, fasteners, and tolerances.
     randomize_com = EventTerm(
         func=mdp.randomize_rigid_body_com,
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot"),
-            "com_range": {"x": (-0.01, 0.01), "y": (-0.01, 0.01), "z": (-0.01, 0.01)},  # ±1 cm
+            "com_range": {"x": (-0.005, 0.005), "y": (-0.005, 0.005), "z": (-0.005, 0.005)},  # ±5 mm
         },
     )
 
@@ -242,7 +241,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
     # set to False to disable all startup domain randomization (mass, gains, COM, friction).
     # reset_root_state and reset_joints are always active regardless of this flag.
     # recommended workflow: train without DR first, then enable once policy is stable.
-    enable_domain_randomization: bool = False
+    enable_domain_randomization: bool = True
 
     # spaces definition - UPDATED for 6 DOF robot
     action_space = 6  # 6 joints to control
