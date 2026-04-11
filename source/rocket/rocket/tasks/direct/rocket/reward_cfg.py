@@ -193,7 +193,7 @@ POLICIES: dict[str, RewardCfg] = {
     "standing": RewardCfg(
         upright             =  3.0,
         lin_vel             = -1.0,   # penalize any horizontal movement
-        vertical_vel        = -1.0,
+        vertical_vel        = -0.2,
         toe_walking         =  2.0,
         alternating_contact =  2.0,
         action_rate         = -0.2,
@@ -203,7 +203,7 @@ POLICIES: dict[str, RewardCfg] = {
     "walking": RewardCfg(
         upright             =  3.0,
         forward_vel         =  3.0,   # reward forward motion
-        vertical_vel        = -1.0,
+        vertical_vel        = -0.2,
         toe_walking         =  2.0,
         alternating_contact =  2.0,
         action_rate         = -0.2,
