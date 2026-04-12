@@ -70,7 +70,7 @@ params:
     truncate_grads: True
     e_clip: 0.2
     horizon_length: 32        # matches Isaac Lab humanoid; shorter = fresher data under DR
-    minibatch_size: 32768     # larger batches smooth noisy DR gradients (Isaac Lab humanoid uses 32768)
+    minibatch_size: 16384     # larger batches smooth noisy DR gradients (Isaac Lab humanoid uses 32768)
     mini_epochs: 5            # fewer passes per batch reduces overfitting to DR noise realization
     critic_coef: 2            # higher critic weight improves value estimation across diverse dynamics
     clip_value: True
