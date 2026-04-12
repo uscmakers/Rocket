@@ -17,6 +17,7 @@ from isaaclab.sensors import ContactSensor
 
 from .rocket_env_cfg import RocketEnvCfg
 from .reward_cfg import POLICIES, RewardInput
+from .reward_gait_utils import compute_gait_signals
 
 
 class RocketEnv(DirectRLEnv):
@@ -177,6 +178,8 @@ class RocketEnv(DirectRLEnv):
         return observations
 
     def _get_rewards(self) -> torch.Tensor:
+        gait = compute_gait_signals(self.contact_sensor_toes)
+
         inputs = RewardInput(
             quat_w               = self.imu.data.quat_w,
             root_lin_vel_w       = self.robot.data.root_lin_vel_w[:, :3],
@@ -191,6 +194,7 @@ class RocketEnv(DirectRLEnv):
             z_height             = self.robot.data.root_pos_w[:, 2],
             calf_forces          = self.contact_sensor_calves.data.net_forces_w,
             toe_forces           = self.contact_sensor_toes.data.net_forces_w,
+            gait                 = gait,
         )
 
         total_reward, components = self.cfg.rewards.compute(inputs)

@@ -91,7 +91,7 @@ class RocketSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Robot/Toe_.*_1",
         update_period=0.0,
         history_length=1,
-        track_air_time=False,
+        track_air_time=True,
     )
 
     # Camera for video recording - 45° angle view

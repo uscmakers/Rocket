@@ -32,6 +32,7 @@ from .reward_utils import (
     rew_action_rate_penalty,
     rew_jerk_penalty,
 )
+from .reward_gait_utils import GaitSignals, rew_feet_air_time_biped
 
 
 # =============================================================================
@@ -57,6 +58,7 @@ class RewardInput:
     z_height:             torch.Tensor  # (N,)    root z-height in world frame
     calf_forces:          torch.Tensor  # (N, 2, 3) net contact forces on calves
     toe_forces:           torch.Tensor  # (N, 2, 3) net contact forces on toes
+    gait:                 GaitSignals | None = None
 
 
 # =============================================================================
@@ -104,6 +106,10 @@ class RewardCfg:
     target_standing_pose: float = 0.0
     height:               float = 0.0
 
+    # gait (optional; requires ContactSensorCfg(track_air_time=True) on toes)
+    feet_air_time_biped:  float = 0.0  # single-stance shaping based on air/contact timers
+    feet_air_time_biped_threshold_s: float = 0.4
+
     def compute(
         self,
         inputs: RewardInput,
@@ -144,6 +150,18 @@ class RewardCfg:
         rew_pose_r   = self.target_standing_pose * rew_pose(inputs.joint_pos, inputs.target_standing_pose)
         rew_height_r = self.height               * inputs.z_height
 
+        # --- gait (optional) ---
+        if inputs.gait is not None:
+            gait = inputs.gait
+            rew_air_time_biped_r = self.feet_air_time_biped * rew_feet_air_time_biped(
+                gait.in_contact,
+                gait.current_air_time,
+                gait.current_contact_time,
+                threshold=self.feet_air_time_biped_threshold_s,
+            )
+        else:
+            rew_air_time_biped_r = torch.zeros_like(rew_alive)
+
         # --- diagnostics (per-joint-group pose error, always logged) ---
         hip_yaw_err  = torch.abs(inputs.joint_pos[:, 0:2] - inputs.target_standing_pose[:, 0:2]).mean(dim=-1)
         hip_roll_err = torch.abs(inputs.joint_pos[:, 2:4] - inputs.target_standing_pose[:, 2:4]).mean(dim=-1)
@@ -156,6 +174,7 @@ class RewardCfg:
             + rew_toe_r + rew_alt_r
             + rew_rate_r + rew_jerk_r
             + rew_jvel_r + rew_torque_r + rew_pose_r + rew_height_r
+            + rew_air_time_biped_r
         )
 
         components: dict[str, torch.Tensor] = {
@@ -174,6 +193,7 @@ class RewardCfg:
             "torque":               rew_torque_r,
             "target_standing_pose": rew_pose_r,
             "height":               rew_height_r,
+            "feet_air_time_biped":  rew_air_time_biped_r,
             # diagnostics
             "hip_yaw_pose_error":   hip_yaw_err,
             "hip_roll_pose_error":  hip_roll_err,

@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import torch
+from isaaclab.sensors import ContactSensor
+
+
+@dataclass
+class GaitSignals:
+    """Contact-derived gait signals for a biped.
+
+    All tensors are per-environment, per-foot with the last dim = 2 (L, R).
+    """
+
+    # Contact state
+    in_contact: torch.Tensor            # (N, 2) bool
+    # Timers (seconds)
+    current_air_time: torch.Tensor      # (N, 2) float
+    current_contact_time: torch.Tensor  # (N, 2) float
+
+    # Convenience
+    single_stance: torch.Tensor         # (N,) bool
+
+
+def compute_gait_signals(
+    toe_contact_sensor: ContactSensor,
+) -> GaitSignals:
+    """Compute gait signals from a toe ContactSensor.
+
+    This function is intentionally **not** TorchScript: it calls sensor helper
+    methods and reads sensor-managed timers.
+
+    Notes:
+        - For full functionality, enable `ContactSensorCfg(track_air_time=True)`.
+    """
+
+    data = toe_contact_sensor.data
+
+    # Isaac Lab MDP biped stepping reward relies on these timer buffers.
+    # Keep this strict so behavior matches upstream (and fails loudly if misconfigured).
+    missing: list[str] = []
+    for attr in ("current_air_time", "current_contact_time"):
+        if not hasattr(data, attr):
+            missing.append(f"ContactSensor.data.{attr}")
+    if missing:
+        raise RuntimeError(
+            "Toe ContactSensor is missing air-time tracking fields. "
+            "Set ContactSensorCfg(track_air_time=True). Missing: " + ", ".join(missing)
+        )
+
+    current_air_time = data.current_air_time
+    current_contact_time = data.current_contact_time
+    in_contact = current_contact_time > 0.0
+
+    single_stance = torch.sum(in_contact.to(torch.int32), dim=-1) == 1
+
+    return GaitSignals(
+        in_contact=in_contact,
+        current_air_time=current_air_time,
+        current_contact_time=current_contact_time,
+        single_stance=single_stance,
+    )
+
+
+@torch.jit.script
+def rew_feet_air_time(
+    first_contact: torch.Tensor,  # (N, 2) bool
+    last_air_time: torch.Tensor,  # (N, 2) float
+    threshold: float,
+) -> torch.Tensor:
+    """MDP-style feet air-time reward (touchdown event, no single-stance constraint).
+
+    Intuition: reward a foot when it *just* touched down and it had been in the air
+    longer than `threshold`.
+    """
+    # Matches Isaac Lab MDP: negative reward for "too short" steps (last_air_time < threshold).
+    contact = first_contact.to(last_air_time.dtype)
+    return torch.sum((last_air_time - threshold) * contact, dim=-1)
+
+
+@torch.jit.script
+def rew_feet_air_time_biped(
+    in_contact: torch.Tensor,            # (N, 2) bool
+    current_air_time: torch.Tensor,      # (N, 2) float
+    current_contact_time: torch.Tensor,  # (N, 2) float
+    threshold: float,
+) -> torch.Tensor:
+    """MDP-style biped air/contact-time reward with single-stance constraint.
+
+    Rewards clean single-stance by paying up to `threshold` seconds of the
+    *minimum* per-foot mode-time (contact time for the stance foot, air time for
+    the swing foot) when exactly one foot is in contact.
+    """
+    single_stance = (torch.sum(in_contact.to(torch.int32), dim=-1) == 1)
+    in_contact_f = in_contact.to(current_air_time.dtype)
+    mode_time = in_contact_f * current_contact_time + (1.0 - in_contact_f) * current_air_time
+    min_mode_time = torch.min(mode_time, dim=-1).values
+    shaped = torch.clamp(min_mode_time, max=threshold)
+    return shaped * single_stance.to(shaped.dtype)
