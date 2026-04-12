@@ -60,7 +60,7 @@ ROCKET_CFG = ArticulationCfg(
         ),
         "knee_steppers": ImplicitActuatorCfg(
             joint_names_expr=["Revolute5", "Revolute6"],
-            effort_limit=5,
+            effort_limit=6,
             velocity_limit=6.2,
             stiffness=200.0,
             damping=10.0,
@@ -142,7 +142,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot"),
-            "mass_distribution_params": (1.0, 1.0),  # skewed high: parts likely heavier than URDF model
+            "mass_distribution_params": (1.0, 1.10),  # skewed high: parts likely heavier than URDF model
             "operation": "scale",
             "distribution": "uniform",
         },
