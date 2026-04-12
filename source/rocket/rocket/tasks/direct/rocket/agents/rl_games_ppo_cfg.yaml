@@ -69,10 +69,10 @@ params:
     entropy_coef: 0.001       # was 0.0 — small entropy bonus prevents premature collapse during hard balance init
     truncate_grads: True
     e_clip: 0.2
-    horizon_length: 32        # matches Isaac Lab humanoid; shorter = fresher data under DR
+    horizon_length: 64        # matches Isaac Lab humanoid; shorter = fresher data under DR
     minibatch_size: 16384     # larger batches smooth noisy DR gradients (Isaac Lab humanoid uses 32768)
-    mini_epochs: 5            # fewer passes per batch reduces overfitting to DR noise realization
-    critic_coef: 2            # higher critic weight improves value estimation across diverse dynamics
+    mini_epochs: 8            # fewer passes per batch reduces overfitting to DR noise realization
+    critic_coef: 1            # higher critic weight improves value estimation across diverse dynamics
     clip_value: True
     seq_length: 4
     bounds_loss_coef: 0.0001
