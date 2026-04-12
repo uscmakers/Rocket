@@ -197,7 +197,7 @@ POLICIES: dict[str, RewardCfg] = {
         toe_walking         =  2.0,
         alternating_contact =  2.0,
         action_rate         = -0.2,
-        jerk                = -0.2,
+        jerk                = -0.1,
     ),
 
     "walking": RewardCfg(
