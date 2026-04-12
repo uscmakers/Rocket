@@ -22,9 +22,16 @@ class GaitSignals:
     # Convenience
     single_stance: torch.Tensor         # (N,) bool
 
+    # Sliding (optional, MDP-style)
+    contacts_force: torch.Tensor | None = None  # (N, 2) bool, force-threshold contact
+    toe_vel_xy: torch.Tensor | None = None      # (N, 2, 2) float, toe linear velocity in world XY
+
 
 def compute_gait_signals(
     toe_contact_sensor: ContactSensor,
+    *,
+    toe_vel_xy: torch.Tensor | None = None,
+    slide_force_threshold: float = 1.0,
 ) -> GaitSignals:
     """Compute gait signals from a toe ContactSensor.
 
@@ -55,11 +62,24 @@ def compute_gait_signals(
 
     single_stance = torch.sum(in_contact.to(torch.int32), dim=-1) == 1
 
+    # MDP feet_slide uses a force-threshold contact mask based on net_forces history.
+    contacts_force: torch.Tensor | None = None
+    if hasattr(data, "net_forces_w_history"):
+        # (N, H, B, 3) -> (N, B)
+        contacts_force = (
+            data.net_forces_w_history.norm(dim=-1).max(dim=1)[0] > slide_force_threshold
+        )
+    elif hasattr(data, "net_forces_w"):
+        # (N, B, 3) -> (N, B)
+        contacts_force = data.net_forces_w.norm(dim=-1) > slide_force_threshold
+
     return GaitSignals(
         in_contact=in_contact,
         current_air_time=current_air_time,
         current_contact_time=current_contact_time,
         single_stance=single_stance,
+        contacts_force=contacts_force,
+        toe_vel_xy=toe_vel_xy,
     )
 
 
@@ -98,3 +118,17 @@ def rew_feet_air_time_biped(
     min_mode_time = torch.min(mode_time, dim=-1).values
     shaped = torch.clamp(min_mode_time, max=threshold)
     return shaped * single_stance.to(shaped.dtype)
+
+
+@torch.jit.script
+def rew_feet_slide(
+    contacts_force: torch.Tensor,  # (N, 2) bool
+    toe_vel_xy: torch.Tensor,      # (N, 2, 2) float
+) -> torch.Tensor:
+    """MDP-style feet sliding penalty.
+
+    Matches Isaac Lab MDP: sum(||v_xy|| * contact_mask) over feet.
+    """
+    contacts_f = contacts_force.to(toe_vel_xy.dtype)
+    speed = torch.norm(toe_vel_xy, dim=-1)  # (N, 2)
+    return torch.sum(speed * contacts_f, dim=-1)

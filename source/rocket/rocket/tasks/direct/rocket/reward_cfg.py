@@ -32,7 +32,7 @@ from .reward_utils import (
     rew_action_rate_penalty,
     rew_jerk_penalty,
 )
-from .reward_gait_utils import GaitSignals, rew_feet_air_time_biped
+from .reward_gait_utils import GaitSignals, rew_feet_air_time_biped, rew_feet_slide
 
 
 # =============================================================================
@@ -109,6 +109,7 @@ class RewardCfg:
     # gait (optional; requires ContactSensorCfg(track_air_time=True) on toes)
     feet_air_time_biped:  float = 0.0  # single-stance shaping based on air/contact timers
     feet_air_time_biped_threshold_s: float = 0.4
+    feet_slide:           float = 0.0  # penalize toe sliding when in force-threshold contact
 
     def compute(
         self,
@@ -159,8 +160,13 @@ class RewardCfg:
                 gait.current_contact_time,
                 threshold=self.feet_air_time_biped_threshold_s,
             )
+            if gait.contacts_force is not None and gait.toe_vel_xy is not None:
+                rew_slide_r = self.feet_slide * rew_feet_slide(gait.contacts_force, gait.toe_vel_xy)
+            else:
+                rew_slide_r = torch.zeros_like(rew_alive)
         else:
             rew_air_time_biped_r = torch.zeros_like(rew_alive)
+            rew_slide_r = torch.zeros_like(rew_alive)
 
         # --- diagnostics (per-joint-group pose error, always logged) ---
         hip_yaw_err  = torch.abs(inputs.joint_pos[:, 0:2] - inputs.target_standing_pose[:, 0:2]).mean(dim=-1)
@@ -174,7 +180,7 @@ class RewardCfg:
             + rew_toe_r + rew_alt_r
             + rew_rate_r + rew_jerk_r
             + rew_jvel_r + rew_torque_r + rew_pose_r + rew_height_r
-            + rew_air_time_biped_r
+            + rew_air_time_biped_r + rew_slide_r
         )
 
         components: dict[str, torch.Tensor] = {
@@ -194,6 +200,7 @@ class RewardCfg:
             "target_standing_pose": rew_pose_r,
             "height":               rew_height_r,
             "feet_air_time_biped":  rew_air_time_biped_r,
+            "feet_slide":           rew_slide_r,
             # diagnostics
             "hip_yaw_pose_error":   hip_yaw_err,
             "hip_roll_pose_error":  hip_roll_err,
@@ -214,8 +221,9 @@ POLICIES: dict[str, RewardCfg] = {
         upright             =  3.0,
         lin_vel             = -1.0,   # penalize any horizontal movement
         vertical_vel        = -0.2,
-        toe_walking         =  2.0,
-        alternating_contact =  2.0,
+        toe_walking         =  2.0,   # penalty for calves contacting the ground (should be refactored into a penalty)
+        alternating_contact =  0.0,   # temporarily off (previously rewarded one-foot loading)
+        feet_air_time_biped =  2.0,
         action_rate         = -0.2,
         jerk                = -0.1,
     ),

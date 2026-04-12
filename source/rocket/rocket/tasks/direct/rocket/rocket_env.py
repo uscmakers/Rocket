@@ -62,6 +62,9 @@ class RocketEnv(DirectRLEnv):
         self.contact_sensor_calves: ContactSensor = self.scene["contact_sensor_calves"]
         self.contact_sensor_toes: ContactSensor = self.scene["contact_sensor_toes"]
 
+        # Toe body ids for sliding diagnostics/rewards (MDP feet_slide style).
+        self._toe_body_ids, _ = self.robot.find_bodies(["Toe_L_1", "Toe_R_1"])
+
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
 
@@ -178,7 +181,8 @@ class RocketEnv(DirectRLEnv):
         return observations
 
     def _get_rewards(self) -> torch.Tensor:
-        gait = compute_gait_signals(self.contact_sensor_toes)
+        toe_vel_xy = self.robot.data.body_lin_vel_w[:, self._toe_body_ids, :2]
+        gait = compute_gait_signals(self.contact_sensor_toes, toe_vel_xy=toe_vel_xy)
 
         inputs = RewardInput(
             quat_w               = self.imu.data.quat_w,
