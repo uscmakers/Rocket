@@ -10,17 +10,15 @@
 #SBATCH --output=jobs/rocket-train_%j.out
 #SBATCH --error=jobs/rocket-train_%j.err
 
-# Usage: ./train.sh [--standing | --walking] [--roboland]
+# Usage: ./train.sh [--roboland] [extra args passed to train.py, e.g. --standing --walking --checkpoint ...]
 
 # Parse arguments
-POLICY="standing"
 ROBOLAND=false
-for arg in "$@"; do
-    case "$arg" in
-        --standing) POLICY="standing" ;;
-        --walking)  POLICY="walking" ;;
-        --roboland) ROBOLAND=true ;;
-        *) echo "Unknown argument: $arg"; echo "Usage: $0 [--standing | --walking] [--roboland]"; exit 1 ;;
+EXTRA_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --roboland) ROBOLAND=true; shift ;;
+        *) EXTRA_ARGS+=("$1");     shift ;;
     esac
 done
 
@@ -33,12 +31,12 @@ fi
 
 TRAIN_ARGS=(
     --max_iterations 10000
+    --num_envs 4096
     --headless
     --track
-    --wandb-entity rocket-babysitters 
+    --wandb-entity rocket-babysitters
     --wandb-project-name rocket
-    --wandb-name "$POLICY"
-    --"$POLICY"
+    "${EXTRA_ARGS[@]}"
 )
 
 if [ "$ROBOLAND" = true ]; then
@@ -73,7 +71,7 @@ else
         /isaac-sim/python.sh -m pip install --user rl-games &&
         /isaac-sim/python.sh -m pip install --user imageio imageio-ffmpeg &&
         /isaac-sim/python.sh -u scripts/list_envs.py &&
-        /isaac-sim/python.sh -u scripts/rl_games/train.py $TRAIN_ARGS
+        /isaac-sim/python.sh -u scripts/rl_games/train.py "${TRAIN_ARGS[@]}"
         "
 fi
 
