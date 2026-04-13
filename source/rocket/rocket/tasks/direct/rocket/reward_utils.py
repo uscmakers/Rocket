@@ -163,6 +163,12 @@ def rew_joint_vel_penalty(joint_vel: torch.Tensor) -> torch.Tensor:
 
 
 @torch.jit.script
+def rew_joint_acc_l2(joint_acc: torch.Tensor) -> torch.Tensor:
+    """Sum of squared joint accelerations. Returns (N,); caller applies negative scale."""
+    return torch.sum(torch.square(joint_acc), dim=-1)
+
+
+@torch.jit.script
 def rew_torque_penalty(torques: torch.Tensor) -> torch.Tensor:
     """Sum of squared torques. Returns (N,); caller applies negative scale."""
     return torch.sum(torch.square(torques), dim=-1)

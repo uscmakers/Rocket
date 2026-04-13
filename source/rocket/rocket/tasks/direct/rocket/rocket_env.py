@@ -67,6 +67,7 @@ class RocketEnv(DirectRLEnv):
 
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
+        self.prev_joint_vel = torch.zeros(self.num_envs, len(self._joint_ids), device=self.device)
 
         # Find joint limits for action normalization (actions * self.joint_pos_range + self.joint_pos_mid)
         joint_limits = self.robot.data.soft_joint_pos_limits[:, self._joint_ids]  # (num_envs, num_joints, 2)
@@ -181,14 +182,21 @@ class RocketEnv(DirectRLEnv):
         return observations
 
     def _get_rewards(self) -> torch.Tensor:
+        env_dt = float(self.cfg.sim.dt * self.cfg.decimation)
+
         toe_vel_xy = self.robot.data.body_lin_vel_w[:, self._toe_body_ids, :2]
         gait = compute_gait_signals(self.contact_sensor_toes, toe_vel_xy=toe_vel_xy)
+
+        joint_vel_ctrl = self.joint_vel[:, self._joint_ids]
+        joint_acc_ctrl = (joint_vel_ctrl - self.prev_joint_vel) / max(env_dt, 1e-6)
+        self.prev_joint_vel[:] = joint_vel_ctrl
 
         inputs = RewardInput(
             quat_w               = self.imu.data.quat_w,
             root_lin_vel_w       = self.robot.data.root_lin_vel_w[:, :3],
             joint_pos            = self.joint_pos[:, self._joint_ids],
-            joint_vel            = self.joint_vel[:, self._joint_ids],
+            joint_vel            = joint_vel_ctrl,
+            joint_acc            = joint_acc_ctrl,
             actions              = self.actions,
             prev_actions         = self.prev_actions,
             prev_prev_actions    = self.prev_prev_actions,
@@ -256,3 +264,4 @@ class RocketEnv(DirectRLEnv):
         # by actions from the previous episode on the first step of a new episode.
         self.prev_actions[env_ids] = 0.0
         self.prev_prev_actions[env_ids] = 0.0
+        self.prev_joint_vel[env_ids] = 0.0

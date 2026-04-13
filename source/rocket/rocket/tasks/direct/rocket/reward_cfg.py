@@ -29,6 +29,7 @@ from .reward_utils import (
     rew_toe_walking,
     rew_alternating_contact,
     rew_joint_vel_penalty,
+    rew_joint_acc_l2,
     rew_torque_penalty,
     rew_pose,
     rew_action_rate_penalty,
@@ -51,6 +52,7 @@ class RewardInput:
     root_lin_vel_w:       torch.Tensor  # (N, 3)  root linear velocity in world frame
     joint_pos:            torch.Tensor  # (N, J)  controlled joint positions
     joint_vel:            torch.Tensor  # (N, J)  controlled joint velocities
+    joint_acc:            torch.Tensor  # (N, J)  controlled joint accelerations (env-step)
     actions:              torch.Tensor  # (N, J)  current policy actions
     prev_actions:         torch.Tensor  # (N, J)  actions from t-1
     prev_prev_actions:    torch.Tensor  # (N, J)  actions from t-2
@@ -106,6 +108,7 @@ class RewardCfg:
 
     # inactive by default — enable as needed
     joint_vel:            float = 0.0
+    joint_acc:            float = 0.0
     torque:               float = 0.0
     target_standing_pose: float = 0.0
     height:               float = 0.0
@@ -156,6 +159,7 @@ class RewardCfg:
 
         # --- optional / inactive by default ---
         rew_jvel_r   = self.joint_vel            * rew_joint_vel_penalty(inputs.joint_vel)
+        rew_jacc_r   = self.joint_acc            * rew_joint_acc_l2(inputs.joint_acc)
         rew_torque_r = self.torque               * rew_torque_penalty(inputs.torques)
         rew_pose_r   = self.target_standing_pose * rew_pose(inputs.joint_pos, inputs.target_standing_pose)
         rew_height_r = self.height               * inputs.z_height
@@ -188,7 +192,7 @@ class RewardCfg:
             + rew_lin_vel_r + rew_forward_vel_r + rew_lat_vel_r + rew_vert_vel_r
             + rew_toe_r + rew_alt_r
             + rew_rate_r + rew_jerk_r
-            + rew_jvel_r + rew_torque_r + rew_pose_r + rew_height_r
+            + rew_jvel_r + rew_jacc_r + rew_torque_r + rew_pose_r + rew_height_r
             + rew_air_time_biped_r + rew_slide_r
         )
 
@@ -206,6 +210,7 @@ class RewardCfg:
             "action_rate":          rew_rate_r,
             "jerk":                 rew_jerk_r,
             "joint_vel":            rew_jvel_r,
+            "joint_acc":            rew_jacc_r,
             "torque":               rew_torque_r,
             "target_standing_pose": rew_pose_r,
             "height":               rew_height_r,
@@ -249,8 +254,9 @@ POLICIES: dict[str, RewardCfg] = {
         alternating_contact =  0.0,
         feet_air_time_biped =  2.0,
         feet_slide          = -0.2,
-        action_rate         = -0.002,
-        jerk                = -0.001,
+        action_rate         = -0.005,
+        joint_acc           = -1.25e-7,
+        jerk                =  0.0,
     ),
 
 }
