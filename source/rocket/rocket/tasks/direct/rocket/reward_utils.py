@@ -20,6 +20,22 @@ import torch
 # =============================================================================
 
 @torch.jit.script
+def _quat_apply(quat_w: torch.Tensor, vec: torch.Tensor) -> torch.Tensor:
+    """Rotate a vector by quaternion (w, x, y, z)."""
+    qw = quat_w[:, 0:1]
+    qv = quat_w[:, 1:4]
+    t = 2.0 * torch.cross(qv, vec, dim=-1)
+    return vec + qw * t + torch.cross(qv, t, dim=-1)
+
+
+@torch.jit.script
+def _quat_apply_inverse(quat_w: torch.Tensor, vec: torch.Tensor) -> torch.Tensor:
+    """Rotate a vector by the inverse (conjugate) of quaternion (w, x, y, z)."""
+    conj = torch.cat((quat_w[:, 0:1], -quat_w[:, 1:4]), dim=-1)
+    return _quat_apply(conj, vec)
+
+
+@torch.jit.script
 def rew_upright(quat_w: torch.Tensor) -> torch.Tensor:
     """exp(-distance) where distance is how far body z-axis is from world up.
 
@@ -38,6 +54,28 @@ def rew_upright(quat_w: torch.Tensor) -> torch.Tensor:
         + (body_z_z - 1.0) * (body_z_z - 1.0)
     )
     return torch.exp(-distance)
+
+@torch.jit.script
+def rew_flat_orientation_l2(quat_w: torch.Tensor) -> torch.Tensor:
+    """Isaac Lab MDP-style 'flat_orientation_l2' penalty (fallback from quat).
+
+    Prefer using `rew_flat_orientation_l2_from_projected_gravity_b` if you already have
+    `asset.data.projected_gravity_b` available (matches MDP exactly).
+    """
+    n = quat_w.shape[0]
+    g_w = torch.tensor([0.0, 0.0, -1.0], device=quat_w.device, dtype=quat_w.dtype).expand(n, 3)
+    projected_gravity_b = _quat_apply_inverse(quat_w, g_w)
+    return torch.sum(torch.square(projected_gravity_b[:, :2]), dim=-1)
+
+
+@torch.jit.script
+def rew_flat_orientation_l2_from_projected_gravity_b(projected_gravity_b: torch.Tensor) -> torch.Tensor:
+    """Isaac Lab MDP-style 'flat_orientation_l2' penalty.
+
+    This matches the upstream computation exactly:
+        sum(square(asset.data.projected_gravity_b[:, :2]))
+    """
+    return torch.sum(torch.square(projected_gravity_b[:, :2]), dim=-1)
 
 
 # =============================================================================

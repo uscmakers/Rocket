@@ -199,6 +199,7 @@ class RocketEnv(DirectRLEnv):
             calf_forces          = self.contact_sensor_calves.data.net_forces_w,
             toe_forces           = self.contact_sensor_toes.data.net_forces_w,
             gait                 = gait,
+            projected_gravity_b  = getattr(self.robot.data, "projected_gravity_b", None),
         )
 
         total_reward, components = self.cfg.rewards.compute(inputs)

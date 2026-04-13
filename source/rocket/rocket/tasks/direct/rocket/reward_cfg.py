@@ -22,6 +22,8 @@ import torch
 
 from .reward_utils import (
     rew_upright,
+    rew_flat_orientation_l2,
+    rew_flat_orientation_l2_from_projected_gravity_b,
     rew_heading_vel,
     rew_vertical_vel_penalty,
     rew_toe_walking,
@@ -59,6 +61,7 @@ class RewardInput:
     calf_forces:          torch.Tensor  # (N, 2, 3) net contact forces on calves
     toe_forces:           torch.Tensor  # (N, 2, 3) net contact forces on toes
     gait:                 GaitSignals | None = None
+    projected_gravity_b:  torch.Tensor | None = None  # (N, 3) if available (MDP-style)
 
 
 # =============================================================================
@@ -85,6 +88,7 @@ class RewardCfg:
 
     # balance
     upright:              float = 0.0
+    flat_orientation_l2:  float = 0.0  # MDP-style bowl (penalty); set negative to penalize
 
     # velocity
     lin_vel:              float = 0.0  # penalize |forward_vel| — any horiz movement (standing)
@@ -129,6 +133,11 @@ class RewardCfg:
 
         # --- balance ---
         rew_up       = self.upright    * rew_upright(inputs.quat_w)
+        if inputs.projected_gravity_b is not None:
+            flat = rew_flat_orientation_l2_from_projected_gravity_b(inputs.projected_gravity_b)
+        else:
+            flat = rew_flat_orientation_l2(inputs.quat_w)
+        rew_flat_r = self.flat_orientation_l2 * flat
 
         # --- velocity ---
         forward_vel, lateral_vel = rew_heading_vel(inputs.quat_w, inputs.root_lin_vel_w)
@@ -175,7 +184,7 @@ class RewardCfg:
 
         total = (
             rew_alive + rew_term
-            + rew_up
+            + rew_up + rew_flat_r
             + rew_lin_vel_r + rew_forward_vel_r + rew_lat_vel_r + rew_vert_vel_r
             + rew_toe_r + rew_alt_r
             + rew_rate_r + rew_jerk_r
@@ -187,6 +196,7 @@ class RewardCfg:
             "alive":                rew_alive,
             "termination":          rew_term,
             "upright":              rew_up,
+            "flat_orientation_l2":  rew_flat_r,
             "lin_vel":              rew_lin_vel_r,
             "forward_vel":          rew_forward_vel_r,
             "lat_vel":              rew_lat_vel_r,
