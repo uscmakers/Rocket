@@ -31,7 +31,7 @@ fi
 
 TRAIN_ARGS=(
     --max_iterations 10000
-    --headless
+
     --track
     --wandb-entity rocket-babysitters
     --wandb-project-name rocket

@@ -218,22 +218,25 @@ class RewardCfg:
 POLICIES: dict[str, RewardCfg] = {
 
     "standing": RewardCfg(
-        upright             =  3.0,
+        upright             =  2.0,
         lin_vel             = -1.0,   # penalize any horizontal movement
-        vertical_vel        = -0.2,
-        toe_walking         =  2.0,   # penalty for calves contacting the ground (should be refactored into a penalty)
+        vertical_vel        = -0.1,
+        toe_walking         =  1.0,   # penalty for calves contacting the ground (should be refactored into a penalty)
         alternating_contact =  0.0,   # temporarily off (previously rewarded one-foot loading)
         feet_air_time_biped =  2.0,
+        feet_slide          = -0.2,
         action_rate         = -0.2,
         jerk                = -0.1,
     ),
 
     "walking": RewardCfg(
-        upright             =  3.0,
+        upright             =  2.0,
         forward_vel         =  3.0,   # reward forward motion
-        vertical_vel        = -0.2,
-        toe_walking         =  2.0,
-        alternating_contact =  2.0,
+        vertical_vel        = -0.1,
+        toe_walking         =  1.0,
+        alternating_contact =  0.0,
+        feet_air_time_biped =  2.0,
+        feet_slide          = -0.2,
         action_rate         = -0.2,
         jerk                = -0.1,
     ),
