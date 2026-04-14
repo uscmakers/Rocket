@@ -158,6 +158,6 @@ def rew_toe_clearance_biped(
     # Only consider swing toe(s) (in single-stance there should be exactly one).
     z_swing = torch.where(swing, toe_pos_z, torch.zeros_like(toe_pos_z))
     h = max(height_threshold, 1e-6)
-    clearance = torch.clamp(torch.relu(z_swing - h), max=h) / h  # (N, 2) in [0, 1]
+    clearance = torch.clamp(z_swing, max=h) / h  # (N, 2) in [0, 1], linear from 0 to h
     reward = torch.max(clearance, dim=-1).values  # pick the swing toe
     return reward * single_stance.to(reward.dtype)
