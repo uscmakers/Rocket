@@ -35,7 +35,7 @@ from .reward_utils import (
     rew_action_rate_penalty,
     rew_jerk_penalty,
 )
-from .reward_gait_utils import GaitSignals, rew_feet_air_time_biped, rew_feet_slide
+from .reward_gait_utils import GaitSignals, rew_feet_air_time_biped, rew_feet_slide, rew_toe_clearance_biped
 
 
 # =============================================================================
@@ -118,6 +118,8 @@ class RewardCfg:
     feet_air_time_biped:  float = 0.0  # single-stance shaping based on air/contact timers
     feet_air_time_biped_threshold_s: float = 0.4
     feet_slide:           float = 0.0  # penalize toe sliding when in force-threshold contact
+    toe_clearance_biped:  float = 0.0  # reward swing toe clearance during single-stance
+    toe_clearance_biped_height_m: float = 0.03
 
     def compute(
         self,
@@ -179,9 +181,16 @@ class RewardCfg:
                 rew_slide_r = self.feet_slide * rew_feet_slide(gait.contacts_force, gait.toe_vel_xy)
             else:
                 rew_slide_r = torch.zeros_like(rew_alive)
+            if gait.toe_pos_z is not None:
+                rew_toe_clear_r = self.toe_clearance_biped * rew_toe_clearance_biped(
+                    gait.in_contact, gait.toe_pos_z, height_threshold=self.toe_clearance_biped_height_m
+                )
+            else:
+                rew_toe_clear_r = torch.zeros_like(rew_alive)
         else:
             rew_air_time_biped_r = torch.zeros_like(rew_alive)
             rew_slide_r = torch.zeros_like(rew_alive)
+            rew_toe_clear_r = torch.zeros_like(rew_alive)
 
         # --- diagnostics (per-joint-group pose error, always logged) ---
         hip_yaw_err  = torch.abs(inputs.joint_pos[:, 0:2] - inputs.target_standing_pose[:, 0:2]).mean(dim=-1)
@@ -195,7 +204,7 @@ class RewardCfg:
             + rew_toe_r + rew_alt_r
             + rew_rate_r + rew_jerk_r
             + rew_jvel_r + rew_jacc_r + rew_torque_r + rew_pose_r + rew_height_r
-            + rew_air_time_biped_r + rew_slide_r
+            + rew_air_time_biped_r + rew_slide_r + rew_toe_clear_r
         )
 
         components: dict[str, torch.Tensor] = {
@@ -219,6 +228,7 @@ class RewardCfg:
             "height":               rew_height_r,
             "feet_air_time_biped":  rew_air_time_biped_r,
             "feet_slide":           rew_slide_r,
+            "toe_clearance_biped":  rew_toe_clear_r,
             # diagnostics
             "hip_yaw_pose_error":   hip_yaw_err,
             "hip_roll_pose_error":  hip_roll_err,

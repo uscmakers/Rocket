@@ -25,12 +25,14 @@ class GaitSignals:
     # Sliding (optional, MDP-style)
     contacts_force: torch.Tensor | None = None  # (N, 2) bool, force-threshold contact
     toe_vel_xy: torch.Tensor | None = None      # (N, 2, 2) float, toe linear velocity in world XY
+    toe_pos_z: torch.Tensor | None = None       # (N, 2) float, toe height in world frame
 
 
 def compute_gait_signals(
     toe_contact_sensor: ContactSensor,
     *,
     toe_vel_xy: torch.Tensor | None = None,
+    toe_pos_z: torch.Tensor | None = None,
     slide_force_threshold: float = 1.0,
 ) -> GaitSignals:
     """Compute gait signals from a toe ContactSensor.
@@ -80,6 +82,7 @@ def compute_gait_signals(
         single_stance=single_stance,
         contacts_force=contacts_force,
         toe_vel_xy=toe_vel_xy,
+        toe_pos_z=toe_pos_z,
     )
 
 
@@ -132,3 +135,29 @@ def rew_feet_slide(
     contacts_f = contacts_force.to(toe_vel_xy.dtype)
     speed = torch.norm(toe_vel_xy, dim=-1)  # (N, 2)
     return torch.sum(speed * contacts_f, dim=-1)
+
+
+@torch.jit.script
+def rew_toe_clearance_biped(
+    in_contact: torch.Tensor,  # (N, 2) bool
+    toe_pos_z: torch.Tensor,   # (N, 2) float
+    height_threshold: float,
+) -> torch.Tensor:
+    """Reward swing-toe clearance during single-stance (biped).
+
+    Pays only when exactly one foot is in contact. Rewards the *swing* toe being
+    above `height_threshold` (meters), normalized to [0, 1] by the threshold
+    for easy scaling:
+        clearance = clamp(relu(z - h), max=h) / h
+
+    Returns:
+        (N,) in [0, 1]
+    """
+    single_stance = (torch.sum(in_contact.to(torch.int32), dim=-1) == 1)  # (N,)
+    swing = (~in_contact)  # (N, 2)
+    # Only consider swing toe(s) (in single-stance there should be exactly one).
+    z_swing = torch.where(swing, toe_pos_z, torch.zeros_like(toe_pos_z))
+    h = max(height_threshold, 1e-6)
+    clearance = torch.clamp(torch.relu(z_swing - h), max=h) / h  # (N, 2) in [0, 1]
+    reward = torch.max(clearance, dim=-1).values  # pick the swing toe
+    return reward * single_stance.to(reward.dtype)

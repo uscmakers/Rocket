@@ -185,7 +185,8 @@ class RocketEnv(DirectRLEnv):
         env_dt = float(self.cfg.sim.dt * self.cfg.decimation)
 
         toe_vel_xy = self.robot.data.body_lin_vel_w[:, self._toe_body_ids, :2]
-        gait = compute_gait_signals(self.contact_sensor_toes, toe_vel_xy=toe_vel_xy)
+        toe_pos_z = self.robot.data.body_pos_w[:, self._toe_body_ids, 2]
+        gait = compute_gait_signals(self.contact_sensor_toes, toe_vel_xy=toe_vel_xy, toe_pos_z=toe_pos_z)
 
         joint_vel_ctrl = self.joint_vel[:, self._joint_ids]
         joint_acc_ctrl = (joint_vel_ctrl - self.prev_joint_vel) / max(env_dt, 1e-6)
