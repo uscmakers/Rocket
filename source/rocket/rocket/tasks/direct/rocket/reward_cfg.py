@@ -95,6 +95,7 @@ class RewardCfg:
     # velocity
     lin_vel:              float = 0.0  # penalize |forward_vel| — any horiz movement (standing)
     forward_vel:          float = 0.0  # reward signed forward vel (walking)
+    backward_vel:         float = 0.0  # penalize backward motion: relu(-forward_vel)
     lat_vel:              float = 0.0  # penalize lateral drift (squared)
     vertical_vel:         float = 0.0  # penalize vertical bouncing (squared)
 
@@ -146,6 +147,7 @@ class RewardCfg:
         forward_vel, lateral_vel = rew_heading_vel(inputs.quat_w, inputs.root_lin_vel_w)
         rew_lin_vel_r    = self.lin_vel      * torch.abs(forward_vel)      # |fwd| penalty (standing)
         rew_forward_vel_r = self.forward_vel * forward_vel                 # signed reward (walking)
+        rew_backward_vel_r = self.backward_vel * torch.relu(-forward_vel)  # penalize negative forward vel
         rew_lat_vel_r    = self.lat_vel      * torch.square(lateral_vel)   # quadratic lateral penalty
         rew_vert_vel_r   = self.vertical_vel * rew_vertical_vel_penalty(inputs.root_lin_vel_w)
 
@@ -189,7 +191,7 @@ class RewardCfg:
         total = (
             rew_alive + rew_term
             + rew_up + rew_flat_r
-            + rew_lin_vel_r + rew_forward_vel_r + rew_lat_vel_r + rew_vert_vel_r
+            + rew_lin_vel_r + rew_forward_vel_r + rew_backward_vel_r + rew_lat_vel_r + rew_vert_vel_r
             + rew_toe_r + rew_alt_r
             + rew_rate_r + rew_jerk_r
             + rew_jvel_r + rew_jacc_r + rew_torque_r + rew_pose_r + rew_height_r
@@ -203,6 +205,7 @@ class RewardCfg:
             "flat_orientation_l2":  rew_flat_r,
             "lin_vel":              rew_lin_vel_r,
             "forward_vel":          rew_forward_vel_r,
+            "backward_vel":         rew_backward_vel_r,
             "lat_vel":              rew_lat_vel_r,
             "vertical_vel":         rew_vert_vel_r,
             "toe_walking":          rew_toe_r,
@@ -255,6 +258,7 @@ POLICIES: dict[str, RewardCfg] = {
         height              =  1.0,
 
         forward_vel         =  4.0,   # reward forward motion
+        backward_vel        = -2.0,   # penalize backward motion explicitly
         vertical_vel        = -0.1,
         
         toe_walking         =  1.0,

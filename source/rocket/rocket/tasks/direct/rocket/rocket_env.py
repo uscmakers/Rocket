@@ -256,12 +256,4 @@ class RocketEnv(DirectRLEnv):
 
     def _reset_idx(self, env_ids: Sequence[int] | None):
         if env_ids is None:
-            env_ids = self.robot._ALL_INDICES
-        # EventManager (configured in EventCfg) handles all reset randomization:
-        # joint offsets, root state, and any startup/interval terms.
-        super()._reset_idx(env_ids)
-        # Clear action history so jerk/action_rate penalties are not contaminated
-        # by actions from the previous episode on the first step of a new episode.
-        self.prev_actions[env_ids] = 0.0
-        self.prev_prev_actions[env_ids] = 0.0
-        self.prev_joint_vel[env_ids] = 0.0
+        
