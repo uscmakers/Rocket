@@ -249,13 +249,14 @@ POLICIES: dict[str, RewardCfg] = {
         upright             =  0.0,
         flat_orientation_l2 = -1.0,   # this is a softer tilt penalty with softer gradients closer to upright vector
         
-        lin_vel             = -1.0,   # penalize any horizontal movement
-        vertical_vel        = -0.1,
+        lin_vel             = -0.0,   # penalize any horizontal movement
+        vertical_vel        = -0.0,
         
         toe_walking         =  1.0,   # penalty for calves contacting the ground (should be refactored into a penalty)
         alternating_contact =  0.0,   # temporarily off (previously rewarded one-foot loading)
         feet_air_time_biped =  4.0,
-        feet_slide          = -0.2,
+        feet_slide          = -0.1,
+        toe_clearance_biped =  0.5,
         
         action_rate         = -0.005,
         jerk                = -0.0,
