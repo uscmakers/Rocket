@@ -139,6 +139,31 @@ def rew_toe_walking(
 
 
 @torch.jit.script
+def rew_friction_cone_penalty(
+    toe_forces: torch.Tensor,    # (N, 2, 3) net contact forces on toes in world frame
+    contacts_force: torch.Tensor # (N, 2) bool contact mask (force-threshold)
+) -> torch.Tensor:
+    """Penalty for lateral toe forces relative to normal force (friction cone violation).
+
+    Penalizes high F_lateral / F_normal ratios — encourages the robot to keep
+    contact forces vertical (extended legs, upright stance) rather than pushing
+    sideways into the friction cone boundary. Only fires when foot is in contact
+    (contact mask) to avoid penalizing airborne feet with near-zero normal force.
+
+    Args:
+        toe_forces:     (N, 2, 3) net contact forces on toes in world frame (x, y, z).
+        contacts_force: (N, 2) bool — force-threshold contact mask, same as feet_slide.
+    Returns:
+        (N,) >= 0; 0 = all force vertical or foot airborne. Caller applies negative scale.
+    """
+    f_normal   = toe_forces[:, :, 2].clamp(min=1e-6)          # (N, 2) vertical component
+    f_lateral  = torch.norm(toe_forces[:, :, :2], dim=-1)      # (N, 2) horizontal magnitude
+    ratio      = f_lateral / f_normal                           # (N, 2) friction ratio per foot
+    mask       = contacts_force.to(ratio.dtype)                 # (N, 2) 0/1 contact mask
+    return (ratio * mask).sum(dim=-1)                           # (N,) only active feet
+
+
+@torch.jit.script
 def rew_alternating_contact(
     toe_forces: torch.Tensor,  # (N, 2, 3)
 ) -> torch.Tensor:

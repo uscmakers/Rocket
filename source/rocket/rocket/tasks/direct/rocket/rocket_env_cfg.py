@@ -90,7 +90,7 @@ class RocketSceneCfg(InteractiveSceneCfg):
     contact_sensor_toes: ContactSensorCfg = ContactSensorCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Toe_.*_1",
         update_period=0.0,
-        history_length=1,
+        history_length=3,
         track_air_time=True,
     )
 

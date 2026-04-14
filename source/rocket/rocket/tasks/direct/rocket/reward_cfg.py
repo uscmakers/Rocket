@@ -28,6 +28,7 @@ from .reward_utils import (
     rew_vertical_vel_penalty,
     rew_toe_walking,
     rew_alternating_contact,
+    rew_friction_cone_penalty,
     rew_joint_vel_penalty,
     rew_joint_acc_l2,
     rew_torque_penalty,
@@ -102,6 +103,7 @@ class RewardCfg:
     # contact quality
     toe_walking:          float = 0.0  # penalize calf ground contact
     alternating_contact:  float = 0.0  # reward alternating foot contact
+    friction_cone:        float = 0.0  # penalize lateral vs normal force ratio on toes
 
     # smoothness
     action_rate:          float = 0.0  # penalize rapid command changes (squared delta)
@@ -154,8 +156,13 @@ class RewardCfg:
         rew_vert_vel_r   = self.vertical_vel * rew_vertical_vel_penalty(inputs.root_lin_vel_w)
 
         # --- contact quality ---
-        rew_toe_r  = self.toe_walking        * rew_toe_walking(inputs.calf_forces, inputs.toe_forces)
-        rew_alt_r  = self.alternating_contact * rew_alternating_contact(inputs.toe_forces)
+        rew_toe_r      = self.toe_walking         * rew_toe_walking(inputs.calf_forces, inputs.toe_forces)
+        rew_alt_r      = self.alternating_contact  * rew_alternating_contact(inputs.toe_forces)
+        # friction_cone uses same force-threshold contact mask as feet_slide (from gait signals)
+        if inputs.gait is not None and inputs.gait.contacts_force is not None:
+            rew_friction_r = self.friction_cone * rew_friction_cone_penalty(inputs.toe_forces, inputs.gait.contacts_force)
+        else:
+            rew_friction_r = torch.zeros_like(rew_alive)
 
         # --- smoothness ---
         rew_rate_r = self.action_rate * rew_action_rate_penalty(inputs.actions, inputs.prev_actions)
@@ -201,7 +208,7 @@ class RewardCfg:
             rew_alive + rew_term
             + rew_up + rew_flat_r
             + rew_lin_vel_r + rew_forward_vel_r + rew_backward_vel_r + rew_lat_vel_r + rew_vert_vel_r
-            + rew_toe_r + rew_alt_r
+            + rew_toe_r + rew_alt_r + rew_friction_r
             + rew_rate_r + rew_jerk_r
             + rew_jvel_r + rew_jacc_r + rew_torque_r + rew_pose_r + rew_height_r
             + rew_air_time_biped_r + rew_slide_r + rew_toe_clear_r
@@ -219,6 +226,7 @@ class RewardCfg:
             "vertical_vel":         rew_vert_vel_r,
             "toe_walking":          rew_toe_r,
             "alternating_contact":  rew_alt_r,
+            "friction_cone":        rew_friction_r,
             "action_rate":          rew_rate_r,
             "jerk":                 rew_jerk_r,
             "joint_vel":            rew_jvel_r,
@@ -246,18 +254,24 @@ class RewardCfg:
 POLICIES: dict[str, RewardCfg] = {
 
     "standing": RewardCfg(
+        # uprightness & balance
         upright             =  0.0,
         flat_orientation_l2 = -1.0,   # this is a softer tilt penalty with softer gradients closer to upright vector
         
+        # locomotion
         lin_vel             = -0.0,   # penalize any horizontal movement
         vertical_vel        = -0.0,
         
-        toe_walking         =  1.0,   # penalty for calves contacting the ground (should be refactored into a penalty)
-        alternating_contact =  0.0,   # temporarily off (previously rewarded one-foot loading)
+        # gait rewards
+        toe_walking         =  0.5,   # penalty for calves contacting the ground (should be refactored into a penalty)
         feet_air_time_biped =  4.0,
-        feet_slide          = -0.1,
         toe_clearance_biped =  0.5,
-        
+
+        # reduce jittering
+        feet_slide          = -0.1,
+        friction_cone       = -0.1,   # penalize lateral vs normal force ratio on toes
+
+        # action smoothness
         action_rate         = -0.005,
         jerk                = -0.0,
         joint_acc           = -1.25e-7,
