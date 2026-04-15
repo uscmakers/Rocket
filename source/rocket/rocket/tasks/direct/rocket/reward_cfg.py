@@ -268,7 +268,7 @@ POLICIES: dict[str, RewardCfg] = {
         toe_clearance_biped =  0.5,
 
         # reduce jittering
-        feet_slide          = -0.1,
+        feet_slide          = -0.0,
         friction_cone       = -0.1,   # penalize lateral vs normal force ratio on toes
 
         # action smoothness

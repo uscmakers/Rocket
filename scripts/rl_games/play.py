@@ -269,6 +269,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             actions = agent.get_action(obs)
             # env stepping
             obs, _, dones, _ = env.step(actions)
+            
+            print(f"obs: {obs}\nactions: {actions}")
 
             if play_logger is not None:
                 play_logger.log(env)
