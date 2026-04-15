@@ -126,7 +126,7 @@ class RewardCfg:
     feet_air_time_biped_threshold_s: float = 0.4
     feet_slide:           float = 0.0  # penalize toe sliding when in force-threshold contact
     toe_clearance_biped:  float = 0.0  # reward swing toe clearance during single-stance
-    toe_clearance_biped_height_m: float = 0.03
+    toe_clearance_biped_height_m: float = 0.05
 
     def compute(
         self,
@@ -268,7 +268,8 @@ POLICIES: dict[str, RewardCfg] = {
         # uprightness & balance
         upright             =  0.0,
         flat_orientation_l2 = -1.0,   # this is a softer tilt penalty with softer gradients closer to upright vector
-        
+        height              =  1.0,
+
         # locomotion
         lin_vel             = -0.0,   # penalize any horizontal movement
         vertical_vel        = -0.0,
@@ -276,11 +277,11 @@ POLICIES: dict[str, RewardCfg] = {
         # gait rewards
         toe_walking         =  0.5,   # penalty for calves contacting the ground (should be refactored into a penalty)
         feet_air_time_biped =  4.0,
-        toe_clearance_biped =  0.5,
+        toe_clearance_biped =  1.0,
 
         # reduce jittering
         feet_slide          = -0.0,
-        friction_cone       = -0.1,   # penalize lateral vs normal force ratio on toes
+        friction_cone       = -0.0,   # penalize lateral vs normal force ratio on toes
 
         # action smoothness
         action_rate         = -0.005,
@@ -295,13 +296,14 @@ POLICIES: dict[str, RewardCfg] = {
 
         forward_vel         =  0.0,
         forward_vel_track   =  4.0,   # H1-style exp tracking toward target velocity
-        backward_vel        = -2.0,   # penalize backward motion explicitly
-        vertical_vel        = -0.1,
-        
-        toe_walking         =  1.0,
-        alternating_contact =  0.0,
+        backward_vel        = -0.0,   # penalize backward motion explicitly
+        vertical_vel        = -0.0,
+       
+        toe_walking         =  0.5,
         feet_air_time_biped =  4.0,
-        feet_slide          = -0.2,
+        toe_clearance_biped =  1.0,
+
+        feet_slide          = -0.0,
         
         action_rate         = -0.005,
         joint_acc           = -1.25e-7,

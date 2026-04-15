@@ -225,7 +225,7 @@ class EventCfg:
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="Toe_.*"),
             "static_friction_range": (1.0, 1.0),   # moderate (0.5) → carpet (1.0); 0.3 too slippery for standing
-            "dynamic_friction_range": (0.7, 0.8),  # always lower than static
+            "dynamic_friction_range": (1.0, 1.0),  # always lower than static
             "restitution_range": (0.0, 0.0),        # real floors don't bounce
             "num_buckets": 64,
         },
