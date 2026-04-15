@@ -119,7 +119,9 @@ class RewardCfg:
     torque:               float = 0.0  # all joints (N, J)
     knee_torque:          float = 0.0  # knee steppers only (joints 4:6)
     target_standing_pose: float = 0.0
-    height:               float = 0.0
+    height:               float = 0.0  # exp tracking: exp(-||z - target||² / σ²)
+    height_target:        float = 0.13 # target z_height in m (IMU height at nominal stance)
+    height_sigma:         float = 0.01 # tolerance width in m
 
     # gait (optional; requires ContactSensorCfg(track_air_time=True) on toes)
     feet_air_time_biped:  float = 0.0  # single-stance shaping based on air/contact timers
@@ -182,7 +184,8 @@ class RewardCfg:
         rew_torque_r      = self.torque               * rew_torque_penalty(inputs.torques)
         rew_knee_torque_r = self.knee_torque          * rew_torque_penalty(inputs.torques[:, 4:6])
         rew_pose_r        = self.target_standing_pose * rew_pose(inputs.joint_pos, inputs.target_standing_pose)
-        rew_height_r      = self.height               * inputs.z_height
+        height_error = inputs.z_height - self.height_target
+        rew_height_r  = self.height * torch.exp(-torch.square(height_error) / (self.height_sigma * self.height_sigma))
 
         # --- gait (optional) ---
         if inputs.gait is not None:
