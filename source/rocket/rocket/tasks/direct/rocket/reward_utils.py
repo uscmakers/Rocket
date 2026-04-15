@@ -114,6 +114,22 @@ def rew_heading_vel(
 
 
 @torch.jit.script
+def rew_forward_vel_tracking(
+    forward_vel: torch.Tensor,  # (N,) heading-frame forward velocity (from rew_heading_vel)
+    target: float,              # target forward velocity in m/s
+    sigma: float,               # tolerance width (H1 uses 0.25; smaller = tighter)
+) -> torch.Tensor:
+    """Exponential forward velocity tracking reward (Isaac Lab H1-style).
+
+    Returns exp(-||v - target||² / sigma²) in (0, 1].
+    1.0 = exactly at target, decays smoothly to 0 as error grows.
+    Caller applies positive scale (e.g. 4.0).
+    """
+    error = forward_vel - target
+    return torch.exp(-torch.square(error) / (sigma * sigma))
+
+
+@torch.jit.script
 def rew_vertical_vel_penalty(root_lin_vel_w: torch.Tensor) -> torch.Tensor:
     """Squared vertical (z) velocity. Returns (N,); caller applies negative scale."""
     return torch.square(root_lin_vel_w[:, 2])

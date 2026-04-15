@@ -25,6 +25,7 @@ from .reward_utils import (
     rew_flat_orientation_l2,
     rew_flat_orientation_l2_from_projected_gravity_b,
     rew_heading_vel,
+    rew_forward_vel_tracking,
     rew_vertical_vel_penalty,
     rew_toe_walking,
     rew_alternating_contact,
@@ -96,6 +97,9 @@ class RewardCfg:
     # velocity
     lin_vel:              float = 0.0  # penalize |forward_vel| — any horiz movement (standing)
     forward_vel:          float = 0.0  # reward signed forward vel (walking)
+    forward_vel_track:    float = 0.0  # H1-style exp tracking: exp(-||v - target||² / σ²)
+    forward_vel_target:   float = 0.4  # target forward velocity in m/s (default 0.4)
+    forward_vel_sigma:    float = 0.15 # tolerance width (H1 uses 0.25)
     backward_vel:         float = 0.0  # penalize backward motion: relu(-forward_vel)
     lat_vel:              float = 0.0  # penalize lateral drift (squared)
     vertical_vel:         float = 0.0  # penalize vertical bouncing (squared)
@@ -112,7 +116,8 @@ class RewardCfg:
     # inactive by default — enable as needed
     joint_vel:            float = 0.0
     joint_acc:            float = 0.0
-    torque:               float = 0.0
+    torque:               float = 0.0  # all joints (N, J)
+    knee_torque:          float = 0.0  # knee steppers only (joints 4:6)
     target_standing_pose: float = 0.0
     height:               float = 0.0
 
@@ -149,11 +154,14 @@ class RewardCfg:
 
         # --- velocity ---
         forward_vel, lateral_vel = rew_heading_vel(inputs.quat_w, inputs.root_lin_vel_w)
-        rew_lin_vel_r    = self.lin_vel      * torch.abs(forward_vel)      # |fwd| penalty (standing)
-        rew_forward_vel_r = self.forward_vel * forward_vel                 # signed reward (walking)
-        rew_backward_vel_r = self.backward_vel * torch.relu(-forward_vel)  # penalize negative forward vel
-        rew_lat_vel_r    = self.lat_vel      * torch.square(lateral_vel)   # quadratic lateral penalty
-        rew_vert_vel_r   = self.vertical_vel * rew_vertical_vel_penalty(inputs.root_lin_vel_w)
+        rew_lin_vel_r         = self.lin_vel       * torch.abs(forward_vel)
+        rew_forward_vel_r     = self.forward_vel   * forward_vel
+        rew_forward_vel_track_r = self.forward_vel_track * rew_forward_vel_tracking(
+            forward_vel, self.forward_vel_target, self.forward_vel_sigma
+        )
+        rew_backward_vel_r    = self.backward_vel  * torch.relu(-forward_vel)
+        rew_lat_vel_r         = self.lat_vel       * torch.square(lateral_vel)
+        rew_vert_vel_r        = self.vertical_vel  * rew_vertical_vel_penalty(inputs.root_lin_vel_w)
 
         # --- contact quality ---
         rew_toe_r      = self.toe_walking         * rew_toe_walking(inputs.calf_forces, inputs.toe_forces)
@@ -169,11 +177,12 @@ class RewardCfg:
         rew_jerk_r = self.jerk        * rew_jerk_penalty(inputs.actions, inputs.prev_actions, inputs.prev_prev_actions)
 
         # --- optional / inactive by default ---
-        rew_jvel_r   = self.joint_vel            * rew_joint_vel_penalty(inputs.joint_vel)
-        rew_jacc_r   = self.joint_acc            * rew_joint_acc_l2(inputs.joint_acc)
-        rew_torque_r = self.torque               * rew_torque_penalty(inputs.torques)
-        rew_pose_r   = self.target_standing_pose * rew_pose(inputs.joint_pos, inputs.target_standing_pose)
-        rew_height_r = self.height               * inputs.z_height
+        rew_jvel_r        = self.joint_vel            * rew_joint_vel_penalty(inputs.joint_vel)
+        rew_jacc_r        = self.joint_acc            * rew_joint_acc_l2(inputs.joint_acc)
+        rew_torque_r      = self.torque               * rew_torque_penalty(inputs.torques)
+        rew_knee_torque_r = self.knee_torque          * rew_torque_penalty(inputs.torques[:, 4:6])
+        rew_pose_r        = self.target_standing_pose * rew_pose(inputs.joint_pos, inputs.target_standing_pose)
+        rew_height_r      = self.height               * inputs.z_height
 
         # --- gait (optional) ---
         if inputs.gait is not None:
@@ -207,10 +216,10 @@ class RewardCfg:
         total = (
             rew_alive + rew_term
             + rew_up + rew_flat_r
-            + rew_lin_vel_r + rew_forward_vel_r + rew_backward_vel_r + rew_lat_vel_r + rew_vert_vel_r
+            + rew_lin_vel_r + rew_forward_vel_r + rew_forward_vel_track_r + rew_backward_vel_r + rew_lat_vel_r + rew_vert_vel_r
             + rew_toe_r + rew_alt_r + rew_friction_r
             + rew_rate_r + rew_jerk_r
-            + rew_jvel_r + rew_jacc_r + rew_torque_r + rew_pose_r + rew_height_r
+            + rew_jvel_r + rew_jacc_r + rew_torque_r + rew_knee_torque_r + rew_pose_r + rew_height_r
             + rew_air_time_biped_r + rew_slide_r + rew_toe_clear_r
         )
 
@@ -221,6 +230,7 @@ class RewardCfg:
             "flat_orientation_l2":  rew_flat_r,
             "lin_vel":              rew_lin_vel_r,
             "forward_vel":          rew_forward_vel_r,
+            "forward_vel_track":    rew_forward_vel_track_r,
             "backward_vel":         rew_backward_vel_r,
             "lat_vel":              rew_lat_vel_r,
             "vertical_vel":         rew_vert_vel_r,
@@ -232,6 +242,7 @@ class RewardCfg:
             "joint_vel":            rew_jvel_r,
             "joint_acc":            rew_jacc_r,
             "torque":               rew_torque_r,
+            "knee_torque":          rew_knee_torque_r,
             "target_standing_pose": rew_pose_r,
             "height":               rew_height_r,
             "feet_air_time_biped":  rew_air_time_biped_r,
@@ -282,7 +293,8 @@ POLICIES: dict[str, RewardCfg] = {
         flat_orientation_l2 = -1.0,
         height              =  1.0,
 
-        forward_vel         =  4.0,   # reward forward motion
+        forward_vel         =  0.0,
+        forward_vel_track   =  4.0,   # H1-style exp tracking toward target velocity
         backward_vel        = -2.0,   # penalize backward motion explicitly
         vertical_vel        = -0.1,
         
