@@ -98,8 +98,8 @@ class RewardCfg:
     lin_vel:              float = 0.0  # penalize |forward_vel| — any horiz movement (standing)
     forward_vel:          float = 0.0  # reward signed forward vel (walking)
     forward_vel_track:    float = 0.0  # H1-style exp tracking: exp(-||v - target||² / σ²)
-    forward_vel_target:   float = 0.4  # target forward velocity in m/s (default 0.4)
-    forward_vel_sigma:    float = 0.15 # tolerance width (H1 uses 0.25)
+    forward_vel_target:   float = 0.1  # target forward velocity in m/s (default 0.4)
+    forward_vel_sigma:    float = 0.025 # tolerance width (H1 uses 0.25)
     backward_vel:         float = 0.0  # penalize backward motion: relu(-forward_vel)
     lat_vel:              float = 0.0  # penalize lateral drift (squared)
     vertical_vel:         float = 0.0  # penalize vertical bouncing (squared)
@@ -308,8 +308,8 @@ POLICIES: dict[str, RewardCfg] = {
 
         feet_slide          = -0.0,
         
-        action_rate         = -0.005,
-        joint_acc           = -1.25e-7,
+        action_rate         = -0.0,
+        joint_acc           = -0.0,
         jerk                =  0.0,
     ),
 
