@@ -20,7 +20,7 @@ params:
     separate: False
     space:
       continuous:
-        mu_activation: None
+        mu_activation: tanh
         sigma_activation: None
 
         mu_init:
