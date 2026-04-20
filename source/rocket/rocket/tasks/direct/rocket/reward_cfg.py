@@ -287,7 +287,7 @@ POLICIES: dict[str, RewardCfg] = {
         friction_cone       = -0.0,   # penalize lateral vs normal force ratio on toes
 
         # action smoothness
-        action_rate         = -0.0,
+        action_rate         = -0.1,
         jerk                = -0.0,
         joint_acc           = -1.25e-7,
     ),
