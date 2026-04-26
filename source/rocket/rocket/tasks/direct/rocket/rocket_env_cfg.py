@@ -171,8 +171,15 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {},     # no randomization, pure reset to URDF init_state + env origin
-            "velocity_range": {},
+            "pose_range": {
+                "roll":  (-0.0873, 0.0873),  # ±5°
+                "pitch": (-0.0873, 0.0873),  # ±5°
+            },
+            "velocity_range": {
+                "x": (-0.05, 0.05),
+                "y": (-0.05, 0.05),
+                "ang_z": (-0.05, 0.05),
+            },
         },
     )
 
