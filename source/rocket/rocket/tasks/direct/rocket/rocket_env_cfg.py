@@ -142,7 +142,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot"),
-            "mass_distribution_params": (1.0, 1.10),  # skewed high: parts likely heavier than URDF model
+            "mass_distribution_params": (1.05, 1.20),  # skewed high: parts likely heavier than URDF model
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -235,7 +235,7 @@ class EventCfg:
 @configclass
 class RocketEnvCfg(DirectRLEnvCfg):
     # env
-    decimation = 4
+    decimation = 8
     episode_length_s = 10.0
 
     # set to False to disable all startup domain randomization (mass, gains, COM, friction).
@@ -290,4 +290,4 @@ class RocketEnvCfg(DirectRLEnvCfg):
     rewards: RewardCfg = RewardCfg()  # overwritten at env init from POLICIES[policy_type]
 
     # termination conditions
-    max_tilt_distance = 0.50  # max tilt before termination
+    max_tilt_distance = 0.75  # max tilt before termination

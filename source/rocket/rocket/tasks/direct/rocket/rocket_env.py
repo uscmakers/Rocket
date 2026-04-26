@@ -153,6 +153,8 @@ class RocketEnv(DirectRLEnv):
             self.robot.data.soft_joint_pos_limits[:, self._joint_ids, 1]
         )
 
+        target_joint_pos[:, self._servo_joint_ids] = 0.0  # freeze servos at 0 rad (URDF default)
+
         # we control all joints in position control mode in isaac sim (delta pos in real life)
         self.robot.set_joint_position_target(target_joint_pos, joint_ids=self._joint_ids)
 
