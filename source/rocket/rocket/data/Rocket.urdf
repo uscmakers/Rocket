@@ -8,7 +8,7 @@
 <link name="Torso_1">
   <inertial>
     <origin xyz="0 0 0" rpy="0 0 0"/>
-    <mass value="1.658125"/>
+    <mass value="2.358125"/>
     <inertia ixx="0.023244" iyy="0.031679" izz="0.012812" ixy="0.0" iyz="0.000141" ixz="0.000024"/>
   </inertial>
   <visual>

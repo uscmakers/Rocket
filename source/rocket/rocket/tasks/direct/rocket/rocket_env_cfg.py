@@ -141,8 +141,8 @@ class EventCfg:
         func=mdp.randomize_rigid_body_mass,
         mode="startup",
         params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "mass_distribution_params": (1.05, 1.20),  # skewed high: parts likely heavier than URDF model
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+            "mass_distribution_params": (0.95, 1.05),  # skewed high: parts likely heavier than URDF model
             "operation": "scale",
             "distribution": "uniform",
         },
