@@ -308,8 +308,8 @@ POLICIES: dict[str, RewardCfg] = {
 
         feet_slide          = -0.0,
         
-        action_rate         = -0.0,
-        joint_acc           = -0.0,
+        action_rate         = -0.1,
+        joint_acc           = -1.25e-7,
         jerk                =  0.0,
     ),
 
