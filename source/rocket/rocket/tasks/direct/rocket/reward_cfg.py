@@ -278,8 +278,8 @@ POLICIES: dict[str, RewardCfg] = {
         vertical_vel        = -0.0,
         
         # gait rewards
-        toe_walking         =  0.5,   # penalty for calves contacting the ground (should be refactored into a penalty)
-        feet_air_time_biped =  4.0,
+        toe_walking         =  4.0,   # penalty for calves contacting the ground (should be refactored into a penalty)
+        feet_air_time_biped =  3.0,
         toe_clearance_biped =  1.0,
 
         # reduce jittering
@@ -287,7 +287,7 @@ POLICIES: dict[str, RewardCfg] = {
         friction_cone       = -0.0,   # penalize lateral vs normal force ratio on toes
 
         # action smoothness
-        action_rate         = -0.1,
+        action_rate         = -0.005,
         jerk                = -0.0,
         joint_acc           = -1.25e-7,
     ),

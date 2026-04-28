@@ -142,7 +142,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "mass_distribution_params": (0.95, 1.05),  # skewed high: parts likely heavier than URDF model
+            "mass_distribution_params": (1.0, 1.05),  # skewed high: parts likely heavier than URDF model
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -242,7 +242,7 @@ class EventCfg:
 @configclass
 class RocketEnvCfg(DirectRLEnvCfg):
     # env
-    decimation = 8
+    decimation = 20
     episode_length_s = 10.0
 
     # set to False to disable all startup domain randomization (mass, gains, COM, friction).
@@ -259,7 +259,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
     # simulation
     sim: SimulationCfg = SimulationCfg(
         dt=1 / 200,
-        render_interval=1,
+        render_interval=decimation,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             static_friction=1.0,
             dynamic_friction=1.0,
