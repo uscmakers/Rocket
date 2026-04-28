@@ -188,7 +188,7 @@ class EventCfg:
         func=mdp.reset_joints_by_offset,
         mode="reset",
         params={
-            "position_range": (-0.1, 0.1),  # ±0.1 rad (~6°) around default
+            "position_range": (-0.05, 0.05),  # ±0.05 rad (~3°) — slight nudge
             "velocity_range": (0.0, 0.0),
         },
     )
@@ -197,16 +197,14 @@ class EventCfg:
     # MEDIUM IMPACT — interval (applied periodically during an episode)
     # -------------------------------------------------------------------------
 
-    # Disabled: all Isaac Lab biped configs (Cassie, H1, G1) disable push randomization —
-    # it destabilizes training before a stable gait is learned. Re-enable at ±0.1 m/s
-    # once the policy can stand/walk reliably.
-    push_robot = None
-    # push_robot = EventTerm(
-    #     func=mdp.push_by_setting_velocity,
-    #     mode="interval",
-    #     interval_range_s=(3.0, 6.0),
-    #     params={"velocity_range": {"x": (-0.1, 0.1), "y": (-0.1, 0.1)}},  # scaled down for small biped
-    # )
+    # ±0.05 m/s derived from H1 (±0.5 m/s, 1.8m tall) scaled by height ratio to Rocket (0.16m):
+    # 0.5 × (0.16/1.8) ≈ 0.044 m/s → rounded to 0.05. Same angular disturbance, right robot scale.
+    push_robot = EventTerm(
+        func=mdp.push_by_setting_velocity,
+        mode="interval",
+        interval_range_s=(5.0, 10.0),
+        params={"velocity_range": {"x": (-0.05, 0.05), "y": (-0.05, 0.05)}},
+    )
 
     # -------------------------------------------------------------------------
     # MEDIUM IMPACT — startup (manufacturing shifts center of mass)
