@@ -202,7 +202,7 @@ class EventCfg:
     push_robot = EventTerm(
         func=mdp.push_by_setting_velocity,
         mode="interval",
-        interval_range_s=(5.0, 10.0),
+        interval_range_s=(4.0, 8.0),
         params={"velocity_range": {"x": (-0.05, 0.05), "y": (-0.05, 0.05)}},
     )
 
@@ -257,7 +257,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
     # simulation
     sim: SimulationCfg = SimulationCfg(
         dt=1 / 200,
-        render_interval=decimation,
+        render_interval=1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             static_friction=1.0,
             dynamic_friction=1.0,
