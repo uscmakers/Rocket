@@ -76,8 +76,8 @@ class RocketSceneCfg(InteractiveSceneCfg):
         history_length=1,
         debug_vis=True,
         # Torso mesh bottom is at Z=0 in link frame (center XY=0,0).
-        # Place IMU 1 inch (0.0254 m) above bottom, centered in XY.
-        offset=ImuCfg.OffsetCfg(pos=(0.0, 0.0, 0.0254)),
+        # Place IMU 3 inches (0.0762 m) above bottom, centered in XY.
+        offset=ImuCfg.OffsetCfg(pos=(0.0, 0.0, 0.05)),
     )
 
     contact_sensor_calves: ContactSensorCfg = ContactSensorCfg(
@@ -121,7 +121,7 @@ class ObsNoiseCfg:
     Set any value to 0.0 to disable noise for that channel.
     Realistic IMU noise: lin_acc >> ang_vel > quat (filtered). Encoders are relatively clean.
     """
-    joint_pos_std: float = 0.01   # rad  — encoder quantization + flex
+    joint_pos_std: float = 0.02   # rad  — encoder quantization + flex
     joint_vel_std: float = 0.05   # rad/s — numerical differentiation amplifies noise
     ang_vel_std:   float = 0.05   # rad/s — MEMS gyro
     lin_acc_std:   float = 0.10   # m/s²  — MEMS accelerometer (noisiest sensor)
