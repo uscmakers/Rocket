@@ -232,10 +232,10 @@ def rew_pose(
 @torch.jit.script
 def rew_action_rate_penalty(
     actions: torch.Tensor,       # (N, J)
-    prev_actions: torch.Tensor,  # (N, J)
+    prev_actions: torch.Tensor,  # (N, J)  unused — kept for signature compatibility
 ) -> torch.Tensor:
-    """Sum of squared action deltas. Returns (N,); caller applies negative scale."""
-    return torch.sum(torch.square(actions - prev_actions), dim=-1)
+    """Velocity: sum of squared raw delta actions (action IS the velocity). Returns (N,)."""
+    return torch.sum(torch.square(actions), dim=-1)
 
 
 @torch.jit.script
@@ -244,11 +244,7 @@ def rew_jerk_penalty(
     prev_actions: torch.Tensor,       # (N, J) t-1
     prev_prev_actions: torch.Tensor,  # (N, J) t-2
 ) -> torch.Tensor:
-    """Discrete jerk: sum of squared second-order action differences.
-
-    Jerk = d²a/dt² ≈ a_t - 2*a_{t-1} + a_{t-2}.
-    Returns (N,); caller applies negative scale.
-    """
+    """Jerk: change in acceleration (third derivative). Returns (N,)."""
     return torch.sum(torch.square(actions - 2.0 * prev_actions + prev_prev_actions), dim=-1)
 
 

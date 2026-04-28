@@ -69,13 +69,12 @@ class RocketEnv(DirectRLEnv):
         self.joint_vel = self.robot.data.joint_vel
         self.prev_joint_vel = torch.zeros(self.num_envs, len(self._joint_ids), device=self.device)
 
-        # Find joint limits for action normalization (actions * self.joint_pos_range + self.joint_pos_mid)
+        # action ∈ [-1,1] × joint_delta_max = delta in radians; clamped to limits in _pre_physics_step
         joint_limits = self.robot.data.soft_joint_pos_limits[:, self._joint_ids]  # (num_envs, num_joints, 2)
-        self.joint_pos_mid = (joint_limits[..., 0] + joint_limits[..., 1]) * 0.5
-        self.joint_pos_range = (joint_limits[..., 1] - joint_limits[..., 0]) * 0.5  # half-range as scale
-        print(f"Joint position limits: {joint_limits[0]}")  # print limits for the first env as reference
-        print(f"Joint position mid: {self.joint_pos_mid[0]}")
-        print(f"Joint position scale: {self.joint_pos_range[0]}")
+        self.joint_delta_max = joint_limits[..., 1] - joint_limits[..., 0]  # full physical range (upper - lower)
+        self._delta_target_pos = torch.zeros(self.num_envs, len(self._joint_ids), device=self.device)
+        print(f"Joint position limits: {joint_limits[0]}")
+        print(f"Joint delta max: {self.joint_delta_max[0]}")
 
         # Target standing pose: all joints at 0 (broadcasts over envs via shape (1, num_joints))
         self.target_standing_pose = torch.zeros(1, len(self._joint_ids), device=self.device)
@@ -140,23 +139,22 @@ class RocketEnv(DirectRLEnv):
         self.prev_actions[:] = self.actions
         self.actions = actions.clone()
 
+        # Compute delta target once per policy step so _apply_action (called decimation
+        # times) just holds the same target rather than re-integrating each sub-step.
+        current_pos = self.robot.data.joint_pos[:, self._joint_ids].clone()
+        delta = self.actions * self.joint_delta_max
+        self._delta_target_pos = (current_pos + delta).clamp(
+            self.robot.data.soft_joint_pos_limits[:, self._joint_ids, 0],
+            self.robot.data.soft_joint_pos_limits[:, self._joint_ids, 1],
+        )
+        self._delta_target_pos[:, self._servo_joint_ids] = 0.0
+
         self.scene.update(dt=self.physics_dt)
         self.imu.update(dt=self.physics_dt)
 
     def _apply_action(self) -> None:
-        # actions are in [-1, 1] after tanh squashing in the policy head, so we scale and shift them according to joint ranges
-        target_joint_pos = self.joint_pos_mid + self.actions * self.joint_pos_range
-
-        # additional clamping to ensure we never exceed joint limits (optional)
-        target_joint_pos = target_joint_pos.clamp(
-            self.robot.data.soft_joint_pos_limits[:, self._joint_ids, 0],
-            self.robot.data.soft_joint_pos_limits[:, self._joint_ids, 1]
-        )
-
-        target_joint_pos[:, self._servo_joint_ids] = 0.0  # freeze servos at 0 rad (URDF default)
-
-        # we control all joints in position control mode in isaac sim (delta pos in real life)
-        self.robot.set_joint_position_target(target_joint_pos, joint_ids=self._joint_ids)
+        # Target was computed once in _pre_physics_step; just apply it each sub-step.
+        self.robot.set_joint_position_target(self._delta_target_pos, joint_ids=self._joint_ids)
 
     def _add_obs_noise(self, x: torch.Tensor, std: float) -> torch.Tensor:
         """Add zero-mean Gaussian noise to an observation tensor. No-op if std is 0."""
