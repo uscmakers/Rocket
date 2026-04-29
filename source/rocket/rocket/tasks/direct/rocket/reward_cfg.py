@@ -87,8 +87,8 @@ class RewardCfg:
     """
 
     # survival — always active, shared across all policies
-    alive:                float = 5.0
-    terminated:           float = -5.0
+    alive:                float = 10.0
+    terminated:           float = -0.0
 
     # balance
     upright:              float = 0.0
@@ -119,16 +119,16 @@ class RewardCfg:
     torque:               float = 0.0  # all joints (N, J)
     knee_torque:          float = 0.0  # knee steppers only (joints 4:6)
     target_standing_pose: float = 0.0
-    height:               float = 0.0  # exp tracking: exp(-||z - target||² / σ²)
-    height_target:        float = 0.13 # target z_height in m (IMU height at nominal stance)
-    height_sigma:         float = 0.01 # tolerance width in m
+    height:               float = 0.0   # exp tracking: exp(-||z - target||² / σ²)
+    height_target:        float = 0.155 # target z_height in m (IMU height at nominal stance)
+    height_sigma:         float = 0.01  # tolerance width in m
 
     # gait (optional; requires ContactSensorCfg(track_air_time=True) on toes)
     feet_air_time_biped:  float = 0.0  # single-stance shaping based on air/contact timers
-    feet_air_time_biped_threshold_s: float = 0.4
+    feet_air_time_biped_threshold_s: float = 0.25
     feet_slide:           float = 0.0  # penalize toe sliding when in force-threshold contact
     toe_clearance_biped:  float = 0.0  # reward swing toe clearance during single-stance
-    toe_clearance_biped_height_m: float = 0.05
+    toe_clearance_biped_height_m: float = 0.02
 
     def compute(
         self,
@@ -270,7 +270,7 @@ POLICIES: dict[str, RewardCfg] = {
     "standing": RewardCfg(
         # uprightness & balance
         upright             =  0.0,
-        flat_orientation_l2 = -1.0,   # this is a softer tilt penalty with softer gradients closer to upright vector
+        flat_orientation_l2 = -2.0,   # this is a softer tilt penalty with softer gradients closer to upright vector
         height              =  1.0,
 
         # locomotion
@@ -294,7 +294,7 @@ POLICIES: dict[str, RewardCfg] = {
 
     "walking": RewardCfg(
         upright             =  0.0,
-        flat_orientation_l2 = -1.0,
+        flat_orientation_l2 = -2.0,
         height              =  1.0,
 
         forward_vel         =  0.0,
@@ -302,13 +302,13 @@ POLICIES: dict[str, RewardCfg] = {
         backward_vel        = -0.0,   # penalize backward motion explicitly
         vertical_vel        = -0.0,
        
-        toe_walking         =  0.5,
-        feet_air_time_biped =  4.0,
+        toe_walking         =  4.0,
+        feet_air_time_biped =  3.0,
         toe_clearance_biped =  1.0,
 
         feet_slide          = -0.0,
         
-        action_rate         = -0.1,
+        action_rate         = -0.005,
         joint_acc           = -1.25e-7,
         jerk                =  0.0,
     ),

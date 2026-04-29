@@ -203,7 +203,7 @@ class EventCfg:
         func=mdp.push_by_setting_velocity,
         mode="interval",
         interval_range_s=(4.0, 8.0),
-        params={"velocity_range": {"x": (-0.05, 0.05), "y": (-0.05, 0.05)}},
+        params={"velocity_range": {"y": (-0.03, 0.03)}},
     )
 
     # -------------------------------------------------------------------------
@@ -295,4 +295,4 @@ class RocketEnvCfg(DirectRLEnvCfg):
     rewards: RewardCfg = RewardCfg()  # overwritten at env init from POLICIES[policy_type]
 
     # termination conditions
-    max_tilt_distance = 0.75  # max tilt before termination
+    max_tilt_distance = 0.5  # max tilt before termination
