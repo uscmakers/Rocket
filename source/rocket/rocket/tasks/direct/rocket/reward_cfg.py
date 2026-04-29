@@ -92,7 +92,10 @@ class RewardCfg:
 
     # balance
     upright:              float = 0.0
-    flat_orientation_l2:  float = 0.0  # MDP-style bowl (penalty); set negative to penalize
+    flat_orientation_l2:  float = 0.0  # shifted bowl penalty; set negative to penalize
+    # target projected_gravity XY in body frame — shifts the bowl minimum away from perfectly vertical.
+    # (0, 0) = vertical; (0, -0.0664) = 3.8° forward lean (COM over support center).
+    flat_orientation_l2_target_xy: tuple[float, float] = (0.0, -0.0664)
 
     # velocity
     lin_vel:              float = 0.0  # penalize |forward_vel| — any horiz movement (standing)
@@ -147,11 +150,12 @@ class RewardCfg:
         rew_term     = self.terminated * inputs.reset_terminated.float()
 
         # --- balance ---
-        rew_up       = self.upright    * rew_upright(inputs.quat_w)
+        rew_up = self.upright * rew_upright(inputs.quat_w)
+        _flat_target = torch.tensor(self.flat_orientation_l2_target_xy, device=inputs.quat_w.device, dtype=inputs.quat_w.dtype)
         if inputs.projected_gravity_b is not None:
-            flat = rew_flat_orientation_l2_from_projected_gravity_b(inputs.projected_gravity_b)
+            flat = rew_flat_orientation_l2_from_projected_gravity_b(inputs.projected_gravity_b, _flat_target)
         else:
-            flat = rew_flat_orientation_l2(inputs.quat_w)
+            flat = rew_flat_orientation_l2(inputs.quat_w, _flat_target)
         rew_flat_r = self.flat_orientation_l2 * flat
 
         # --- velocity ---
