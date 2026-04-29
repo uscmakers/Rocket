@@ -250,6 +250,15 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if isinstance(obs, dict):
         obs = obs["obs"]
     timestep = 0
+
+    # delta tracking state
+    _track_intended = None
+    _track_prev_pos = None
+    _track_ratio_acc = torch.zeros(6)
+    _track_error_acc = torch.zeros(6)
+    _track_n = 0
+    JOINT_LABELS = ["srv_L", "srv_R", "hip_L", "hip_R", "kne_L", "kne_R"]
+    PRINT_EVERY = 50
     # required: enables the flag for batched observations
     _ = agent.get_batch_size(obs, 1)
     # initialize RNN states if used
@@ -267,9 +276,36 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             obs = agent.obs_to_torch(obs)
             # agent stepping
             actions = agent.get_action(obs)
+
+            # capture intended target and current pos before step
+            _re = env.unwrapped
+            _track_prev_pos    = _re.robot.data.joint_pos[0, _re._joint_ids].clone().cpu()
+            _track_intended    = _re._delta_target_pos[0].clone().cpu()
+
             # env stepping
             obs, _, dones, _ = env.step(actions)
-            
+
+            # compute tracking stats
+            actual_pos     = _re.robot.data.joint_pos[0, _re._joint_ids].clone().cpu()
+            intended_delta = _track_intended - _track_prev_pos
+            actual_delta   = actual_pos - _track_prev_pos
+            mask = intended_delta.abs() > 1e-3
+            ratio = torch.zeros(6)
+            ratio[mask] = (actual_delta[mask] / intended_delta[mask]).clamp(-2, 2)
+            _track_ratio_acc += ratio
+            _track_error_acc += (actual_pos - _track_intended).abs()
+            _track_n += 1
+            if _track_n % PRINT_EVERY == 0:
+                r = _track_ratio_acc / PRINT_EVERY
+                e = _track_error_acc / PRINT_EVERY
+                print(f"\n--- delta tracking (avg over {PRINT_EVERY} steps) ---")
+                print(f"  {'joint':<8} {'achieved%':>10} {'err_rad':>9} {'status':>10}")
+                for i, lbl in enumerate(JOINT_LABELS):
+                    pct = r[i].item() * 100
+                    status = "OK" if 80 <= pct <= 120 else ("OVERSHOOT" if pct > 120 else "UNDERSHOOT")
+                    print(f"  {lbl:<8} {pct:>9.1f}% {e[i].item():>9.4f}  {status}")
+                _track_ratio_acc.zero_()
+                _track_error_acc.zero_()
             print(f"obs: {obs}\nactions: {actions}")
 
             if play_logger is not None:

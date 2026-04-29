@@ -72,7 +72,7 @@ ROCKET_CFG = ArticulationCfg(
 class RocketSceneCfg(InteractiveSceneCfg):
     imu: ImuCfg = ImuCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Torso_1",
-        update_period=0.0,  # every step
+        update_period=0.01,  # 100 Hz
         history_length=1,
         debug_vis=True,
         # Torso mesh bottom is at Z=0 in link frame (center XY=0,0).
