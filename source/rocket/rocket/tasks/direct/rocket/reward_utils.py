@@ -89,17 +89,18 @@ def rew_heading_vel(
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Decompose root velocity into the robot's heading frame.
 
-    Projects body +x to the horizontal plane and renormalizes so pitch
-    doesn't bleed into the forward signal.
+    Rocket faces +Y body axis (legs spread along X). Projects body +Y to the
+    horizontal plane and renormalizes so pitch doesn't bleed into the forward signal.
 
     Returns:
-        forward_vel: (N,) velocity along the robot's facing direction (signed)
+        forward_vel: (N,) velocity along the robot's facing direction (+Y body, signed)
         lateral_vel: (N,) velocity perpendicular to heading (left = positive)
     """
     qw = quat_w[:, 0]; qx = quat_w[:, 1]; qy = quat_w[:, 2]; qz = quat_w[:, 3]
 
-    fwd_x = 1.0 - 2.0 * (qy * qy + qz * qz)
-    fwd_y = 2.0 * (qx * qy + qw * qz)
+    # +Y body axis in world frame (forward)
+    fwd_x = 2.0 * (qx * qy - qw * qz)
+    fwd_y = 1.0 - 2.0 * (qx * qx + qz * qz)
     fwd_norm = torch.sqrt(fwd_x * fwd_x + fwd_y * fwd_y).clamp(min=1e-6)
     fwd_x = fwd_x / fwd_norm
     fwd_y = fwd_y / fwd_norm
