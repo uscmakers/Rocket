@@ -270,7 +270,7 @@ POLICIES: dict[str, RewardCfg] = {
     "standing": RewardCfg(
         # uprightness & balance
         upright             =  0.0,
-        flat_orientation_l2 = -2.0,   # this is a softer tilt penalty with softer gradients closer to upright vector
+        flat_orientation_l2 = -1.0,   # this is a softer tilt penalty with softer gradients closer to upright vector
         height              =  1.0,
 
         # locomotion
@@ -278,8 +278,8 @@ POLICIES: dict[str, RewardCfg] = {
         vertical_vel        = -0.0,
         
         # gait rewards
-        toe_walking         =  4.0,   # penalty for calves contacting the ground (should be refactored into a penalty)
-        feet_air_time_biped =  3.0,
+        toe_walking         =  3.0,   # penalty for calves contacting the ground (should be refactored into a penalty)
+        feet_air_time_biped =  2.0,
         toe_clearance_biped =  1.0,
 
         # reduce jittering
@@ -294,16 +294,16 @@ POLICIES: dict[str, RewardCfg] = {
 
     "walking": RewardCfg(
         upright             =  0.0,
-        flat_orientation_l2 = -2.0,
+        flat_orientation_l2 = -0.5,
         height              =  1.0,
 
         forward_vel         =  0.0,
-        forward_vel_track   =  4.0,   # H1-style exp tracking toward target velocity
+        forward_vel_track   =  2.0,   # H1-style exp tracking toward target velocity
         backward_vel        = -0.0,   # penalize backward motion explicitly
         vertical_vel        = -0.0,
        
-        toe_walking         =  4.0,
-        feet_air_time_biped =  3.0,
+        toe_walking         =  3.0,
+        feet_air_time_biped =  2.0,
         toe_clearance_biped =  1.0,
 
         feet_slide          = -0.0,
