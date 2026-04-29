@@ -56,26 +56,33 @@ def rew_upright(quat_w: torch.Tensor) -> torch.Tensor:
     return torch.exp(-distance)
 
 @torch.jit.script
-def rew_flat_orientation_l2(quat_w: torch.Tensor) -> torch.Tensor:
-    """Isaac Lab MDP-style 'flat_orientation_l2' penalty (fallback from quat).
+def rew_flat_orientation_l2(quat_w: torch.Tensor, target_xy: torch.Tensor) -> torch.Tensor:
+    """Shifted flat-orientation bowl penalty (fallback from quat).
 
-    Prefer using `rew_flat_orientation_l2_from_projected_gravity_b` if you already have
-    `asset.data.projected_gravity_b` available (matches MDP exactly).
+    Args:
+        quat_w:    (N, 4) quaternion in (w, x, y, z) format.
+        target_xy: (2,) target projected_gravity XY in body frame.
+                   (0, 0) = perfectly vertical bowl; (0, -0.0664) = 3.8° forward lean.
     """
     n = quat_w.shape[0]
     g_w = torch.tensor([0.0, 0.0, -1.0], device=quat_w.device, dtype=quat_w.dtype).expand(n, 3)
     projected_gravity_b = _quat_apply_inverse(quat_w, g_w)
-    return torch.sum(torch.square(projected_gravity_b[:, :2]), dim=-1)
+    return torch.sum(torch.square(projected_gravity_b[:, :2] - target_xy.unsqueeze(0)), dim=-1)
 
 
 @torch.jit.script
-def rew_flat_orientation_l2_from_projected_gravity_b(projected_gravity_b: torch.Tensor) -> torch.Tensor:
-    """Isaac Lab MDP-style 'flat_orientation_l2' penalty.
+def rew_flat_orientation_l2_from_projected_gravity_b(
+    projected_gravity_b: torch.Tensor,
+    target_xy: torch.Tensor,
+) -> torch.Tensor:
+    """Shifted flat-orientation bowl penalty using pre-computed projected gravity.
 
-    This matches the upstream computation exactly:
-        sum(square(asset.data.projected_gravity_b[:, :2]))
+    Args:
+        projected_gravity_b: (N, 3) gravity vector in body frame.
+        target_xy:           (2,) target projected_gravity XY in body frame.
+                             (0, 0) = perfectly vertical bowl; (0, -0.0664) = 3.8° forward lean.
     """
-    return torch.sum(torch.square(projected_gravity_b[:, :2]), dim=-1)
+    return torch.sum(torch.square(projected_gravity_b[:, :2] - target_xy.unsqueeze(0)), dim=-1)
 
 
 # =============================================================================
