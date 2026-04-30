@@ -312,7 +312,7 @@ POLICIES: dict[str, RewardCfg] = {
 
     "walking": RewardCfg(
         upright             =  0.0,
-        flat_orientation_l2 = -0.5,
+        flat_orientation_l2 = -1.0,
         height              =  1.0,
 
         forward_vel         =  0.0,
