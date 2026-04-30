@@ -48,7 +48,7 @@ ROCKET_CFG = ArticulationCfg(
             joint_names_expr=["Revolute1", "Revolute2"],
             effort_limit=0.25,
             velocity_limit=5.2,
-            stiffness=200.0,   # position-controlled: needs spring stiffness
+            stiffness=120.0,   # position-controlled: needs spring stiffness
             damping=10.0,
         ),
         "hip_steppers": ImplicitActuatorCfg(
