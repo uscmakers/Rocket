@@ -263,10 +263,6 @@ class RocketEnvCfg(DirectRLEnvCfg):
             dynamic_friction=1.0,
             restitution=0.0,
         ),
-        physx=sim_utils.PhysxCfg(
-            solver_position_iteration_count=8,
-            solver_velocity_iteration_count=4,
-        )
     )
 
     # robot - UPDATED to use ROCKET_CFG
