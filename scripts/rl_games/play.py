@@ -140,17 +140,24 @@ class PlayLogger:
         self._wandb.log(data, step=self._step[0])
 
 
+_TRACKING_FLUSH_EVERY = 50  # steps between chart flushes
+
+
 class DiagnosticsLogger:
     """Logs robot-level diagnostics and per-joint position tracking (actual vs target).
 
-    Position tracking panels: log tracking/{joint}/actual_rad and
-    tracking/{joint}/target_rad — overlay both lines on the same wandb panel
-    by selecting both metrics in the custom chart editor.
+    Tracking charts: uses wandb.plot.line_series so actual_rad and target_rad are
+    automatically overlaid on the same graph — no manual panel config needed.
+    Charts flush every _TRACKING_FLUSH_EVERY steps.
     """
 
     def __init__(self, wandb, step_ref: list):
         self._wandb = wandb
-        self._step  = step_ref  # shared [int] so all loggers stay in sync
+        self._step  = step_ref
+        # rolling buffers for line_series charts
+        self._buf_steps:  list = []
+        self._buf_actual: dict = {label: [] for label in _JOINT_LABELS}
+        self._buf_target: dict = {label: [] for label in _JOINT_LABELS}
 
     def log(self, env):
         rocket_env = env.unwrapped
@@ -160,27 +167,45 @@ class DiagnosticsLogger:
         quat = rocket_env.imu.data.quat_w[0].cpu()  # (w, x, y, z)
         qw, qx, qy, qz = quat[0].item(), quat[1].item(), quat[2].item(), quat[3].item()
 
-        # forward tilt: angle of body Z axis in the world Y-Z plane (positive = leaning forward)
+        # forward tilt: angle of body Z in world Y-Z plane (positive = leaning toward +Y)
         body_z_y = 2.0 * (qy * qz - qw * qx)
-        forward_tilt_deg = _math.degrees(_math.asin(max(-1.0, min(1.0, body_z_y))))
-        data["robot/forward_tilt_deg"] = forward_tilt_deg
+        data["robot/forward_tilt_deg"] = _math.degrees(_math.asin(max(-1.0, min(1.0, body_z_y))))
 
         data["robot/height_m"] = rocket_env.robot.data.root_pos_w[0, 2].item()
 
-        # both-feet-airborne signal: 1.0 when both feet off ground, 0.0 otherwise
+        # 1.0 when both feet off ground, 0.0 otherwise
         contact_time = rocket_env.contact_sensor_toes.data.current_contact_time[0].cpu()
         data["robot/both_feet_airborne"] = 1.0 if (contact_time[0] == 0.0 and contact_time[1] == 0.0) else 0.0
 
-        # --- per-joint position tracking: actual vs target ---
+        self._wandb.log(data, step=self._step[0])
+
+        # --- buffer per-joint tracking data ---
         joint_ids  = rocket_env._joint_ids
         actual_pos = rocket_env.robot.data.joint_pos[0, joint_ids].cpu()
         target_pos = rocket_env._delta_target_pos[0].cpu()
 
+        self._buf_steps.append(self._step[0])
         for i, label in enumerate(_JOINT_LABELS):
-            data[f"tracking/{label}/actual_rad"] = actual_pos[i].item()
-            data[f"tracking/{label}/target_rad"] = target_pos[i].item()
+            self._buf_actual[label].append(actual_pos[i].item())
+            self._buf_target[label].append(target_pos[i].item())
 
-        self._wandb.log(data, step=self._step[0])
+        # flush as line_series charts every N steps so actual+target appear on same graph
+        if len(self._buf_steps) >= _TRACKING_FLUSH_EVERY:
+            charts = {}
+            for label in _JOINT_LABELS:
+                charts[f"tracking/{label}"] = self._wandb.plot.line_series(
+                    xs=self._buf_steps,
+                    ys=[self._buf_actual[label], self._buf_target[label]],
+                    keys=["actual_rad", "target_rad"],
+                    title=label,
+                    xname="step",
+                )
+            self._wandb.log(charts, step=self._step[0])
+            # clear buffers
+            self._buf_steps.clear()
+            for label in _JOINT_LABELS:
+                self._buf_actual[label].clear()
+                self._buf_target[label].clear()
 
 
 class WandbSession:
