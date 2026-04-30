@@ -90,39 +90,36 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 import rocket.tasks  # noqa: F401
 
 
+import math as _math
+
+# Joint order matches _joint_ids = servo_joint_ids + stepper_joint_ids
+# servo_joint_names  = ["Revolute1", "Revolute2"]  → hip_servo_L, hip_servo_R
+# hip_joint_names    = ["Revolute3", "Revolute4"]  → hip_stepper_L, hip_stepper_R
+# knee_joint_names   = ["Revolute5", "Revolute6"]  → knee_stepper_L, knee_stepper_R
+_JOINT_LABELS = [
+    "hip_servo_L", "hip_servo_R",
+    "hip_stepper_L", "hip_stepper_R",
+    "knee_stepper_L", "knee_stepper_R",
+]
+
+
 class PlayLogger:
-    """Logs per-step diagnostics for env 0 to Weights & Biases during play.
+    """Logs joint state (pos, vel, torque) and foot diagnostics for env 0 to wandb."""
 
-    Accesses robot state the same way _get_rewards does — via env.unwrapped.robot.data.
-    """
-
-    def __init__(self, run_name: str):
-        import wandb
-        wandb.init(project="rocket-play", name=run_name, reinit=True)
+    def __init__(self, wandb, step_ref: list):
         self._wandb = wandb
-        self._step = 0
-
-    # Joint order matches _joint_ids = servo_joint_ids + stepper_joint_ids
-    # servo_joint_names  = ["Revolute1", "Revolute2"]  → hip_servo_L, hip_servo_R
-    # hip_joint_names    = ["Revolute3", "Revolute4"]  → hip_stepper_L, hip_stepper_R
-    # knee_joint_names   = ["Revolute5", "Revolute6"]  → knee_stepper_L, knee_stepper_R
-    JOINT_LABELS = [
-        "hip_servo_L", "hip_servo_R",
-        "hip_stepper_L", "hip_stepper_R",
-        "knee_stepper_L", "knee_stepper_R",
-    ]
+        self._step  = step_ref  # shared [int] so all loggers stay in sync
 
     def log(self, env):
-        """Sample robot state for env 0 and log all joint diagnostics to wandb."""
         rocket_env = env.unwrapped
-        joint_ids = rocket_env._joint_ids
+        joint_ids  = rocket_env._joint_ids
 
         joint_pos = rocket_env.robot.data.joint_pos[0, joint_ids].cpu()
         joint_vel = rocket_env.robot.data.joint_vel[0, joint_ids].cpu()
         torques   = rocket_env.robot.data.applied_torque[0, joint_ids].cpu()
 
         data = {}
-        for i, label in enumerate(self.JOINT_LABELS):
+        for i, label in enumerate(_JOINT_LABELS):
             data[f"joint_pos/{label}"]    = joint_pos[i].item()
             data[f"joint_vel/{label}"]    = joint_vel[i].item()
             data[f"joint_torque/{label}"] = torques[i].item()
@@ -130,8 +127,77 @@ class PlayLogger:
         data["joint_vel/max_abs"]    = joint_vel.abs().max().item()
         data["joint_torque/max_abs"] = torques.abs().max().item()
 
-        self._wandb.log(data, step=self._step)
-        self._step += 1
+        # foot clearance and air/contact time (L=index 0, R=index 1)
+        toe_pos_z    = rocket_env.robot.data.body_pos_w[0, rocket_env._toe_body_ids, 2].cpu()
+        air_time     = rocket_env.contact_sensor_toes.data.current_air_time[0].cpu()
+        contact_time = rocket_env.contact_sensor_toes.data.current_contact_time[0].cpu()
+
+        for i, side in enumerate(["L", "R"]):
+            data[f"foot/toe_clearance_m/{side}"] = toe_pos_z[i].item()
+            data[f"foot/air_time_s/{side}"]       = air_time[i].item()
+            data[f"foot/contact_time_s/{side}"]   = contact_time[i].item()
+
+        self._wandb.log(data, step=self._step[0])
+
+
+class DiagnosticsLogger:
+    """Logs robot-level diagnostics and per-joint position tracking (actual vs target).
+
+    Position tracking panels: log tracking/{joint}/actual_rad and
+    tracking/{joint}/target_rad — overlay both lines on the same wandb panel
+    by selecting both metrics in the custom chart editor.
+    """
+
+    def __init__(self, wandb, step_ref: list):
+        self._wandb = wandb
+        self._step  = step_ref  # shared [int] so all loggers stay in sync
+
+    def log(self, env):
+        rocket_env = env.unwrapped
+        data = {}
+
+        # --- robot state ---
+        quat = rocket_env.imu.data.quat_w[0].cpu()  # (w, x, y, z)
+        qw, qx, qy, qz = quat[0].item(), quat[1].item(), quat[2].item(), quat[3].item()
+
+        # forward tilt: angle of body Z axis in the world Y-Z plane (positive = leaning forward)
+        body_z_y = 2.0 * (qy * qz - qw * qx)
+        forward_tilt_deg = _math.degrees(_math.asin(max(-1.0, min(1.0, body_z_y))))
+        data["robot/forward_tilt_deg"] = forward_tilt_deg
+
+        data["robot/height_m"] = rocket_env.robot.data.root_pos_w[0, 2].item()
+
+        # both-feet-airborne signal: 1.0 when both feet off ground, 0.0 otherwise
+        contact_time = rocket_env.contact_sensor_toes.data.current_contact_time[0].cpu()
+        data["robot/both_feet_airborne"] = 1.0 if (contact_time[0] == 0.0 and contact_time[1] == 0.0) else 0.0
+
+        # --- per-joint position tracking: actual vs target ---
+        joint_ids  = rocket_env._joint_ids
+        actual_pos = rocket_env.robot.data.joint_pos[0, joint_ids].cpu()
+        target_pos = rocket_env._delta_target_pos[0].cpu()
+
+        for i, label in enumerate(_JOINT_LABELS):
+            data[f"tracking/{label}/actual_rad"] = actual_pos[i].item()
+            data[f"tracking/{label}/target_rad"] = target_pos[i].item()
+
+        self._wandb.log(data, step=self._step[0])
+
+
+class WandbSession:
+    """Owns the wandb run and coordinates all sub-loggers."""
+
+    def __init__(self, run_name: str):
+        import wandb
+        wandb.init(project="rocket-play", name=run_name, reinit=True)
+        self._wandb   = wandb
+        self._step    = [0]  # shared mutable int across loggers
+        self.play     = PlayLogger(wandb, self._step)
+        self.diag     = DiagnosticsLogger(wandb, self._step)
+
+    def log(self, env):
+        self.play.log(env)
+        self.diag.log(env)
+        self._step[0] += 1
 
     def finish(self):
         self._wandb.finish()
@@ -243,7 +309,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     dt = env.unwrapped.step_dt
 
     # set up wandb logger if requested
-    play_logger = PlayLogger(run_name=log_dir) if args_cli.wandb else None
+    play_logger = WandbSession(run_name=log_dir) if args_cli.wandb else None
 
     # reset environment
     obs = env.reset()
