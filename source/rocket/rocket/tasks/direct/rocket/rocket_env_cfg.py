@@ -38,10 +38,6 @@ ROCKET_CFG = ArticulationCfg(
                 damping=0.0
             )
         ),
-        rigid_props=sim_utils.RigidBodyPropertiesCfg(  # 👈 here
-            solver_position_iteration_count=8,
-            solver_velocity_iteration_count=4,
-        ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.16),  # Initial position (spawn at 0.3m height)
@@ -261,7 +257,7 @@ class RocketEnvCfg(DirectRLEnvCfg):
     # simulation
     sim: SimulationCfg = SimulationCfg(
         dt=1 / 200,
-        render_interval=1,
+        render_interval=decimation,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             static_friction=1.0,
             dynamic_friction=1.0,

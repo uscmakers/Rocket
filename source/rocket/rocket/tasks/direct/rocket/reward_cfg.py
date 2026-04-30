@@ -325,7 +325,7 @@ POLICIES: dict[str, RewardCfg] = {
         feet_air_time_biped =  2.0,
         toe_clearance_biped =  1.0,
         both_feet_airborne  = -3.0,   # penalty: both feet off ground simultaneously
-        joint_pos_tracking  = -5.0,   # penalty: MSE between actual and target joint positions
+        joint_pos_tracking  = -10.0,   # penalty: MSE between actual and target joint positions
 
         feet_slide          = -0.0,
 
