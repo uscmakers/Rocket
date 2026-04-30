@@ -299,7 +299,7 @@ POLICIES: dict[str, RewardCfg] = {
         feet_air_time_biped =  0.0,
         toe_clearance_biped =  0.0,
         both_feet_airborne  =  0.0,   # handled by termination condition
-        joint_pos_tracking  = -10.0,
+        joint_pos_tracking  = -0.0,
 
         # reduce jittering
         feet_slide          = -0.0,
@@ -325,7 +325,7 @@ POLICIES: dict[str, RewardCfg] = {
         feet_air_time_biped =  1.0,
         toe_clearance_biped =  1.0,
         both_feet_airborne  =  0.0,   # handled by termination condition
-        joint_pos_tracking  = -10.0,
+        joint_pos_tracking  = -0.0,
 
         feet_slide          = -0.0,
 
