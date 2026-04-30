@@ -257,6 +257,26 @@ def rew_jerk_penalty(
 
 
 # =============================================================================
+# JUMPING
+# =============================================================================
+
+@torch.jit.script
+def rew_both_feet_airborne(
+    in_contact: torch.Tensor,  # (N, 2) bool
+    toe_pos_z: torch.Tensor,   # (N, 2) float  toe height in world frame
+) -> torch.Tensor:
+    """Penalty when both feet are simultaneously off the ground.
+
+    Returns 0 whenever at least one foot is in contact. When both feet are
+    airborne, returns the sum of toe heights so larger jumps cost more.
+    Caller applies a negative scale.
+    """
+    double_float = torch.sum(in_contact.to(torch.int32), dim=-1) == 0  # (N,)
+    height_sum = toe_pos_z.sum(dim=-1)                                  # (N,)
+    return height_sum * double_float.to(height_sum.dtype)
+
+
+# =============================================================================
 # DEBUG (not jit — uses print)
 # =============================================================================
 

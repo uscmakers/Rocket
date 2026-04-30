@@ -36,6 +36,7 @@ from .reward_utils import (
     rew_pose,
     rew_action_rate_penalty,
     rew_jerk_penalty,
+    rew_both_feet_airborne,
 )
 from .reward_gait_utils import GaitSignals, rew_feet_air_time_biped, rew_feet_slide, rew_toe_clearance_biped
 
@@ -132,6 +133,7 @@ class RewardCfg:
     feet_slide:           float = 0.0  # penalize toe sliding when in force-threshold contact
     toe_clearance_biped:  float = 0.0  # reward swing toe clearance during single-stance
     toe_clearance_biped_height_m: float = 0.02
+    both_feet_airborne:   float = 0.0  # penalize both feet off ground simultaneously
 
     def compute(
         self,
@@ -208,12 +210,17 @@ class RewardCfg:
                 rew_toe_clear_r = self.toe_clearance_biped * rew_toe_clearance_biped(
                     gait.in_contact, gait.toe_pos_z, height_threshold=self.toe_clearance_biped_height_m
                 )
+                rew_airborne_r = self.both_feet_airborne * rew_both_feet_airborne(
+                    gait.in_contact, gait.toe_pos_z
+                )
             else:
                 rew_toe_clear_r = torch.zeros_like(rew_alive)
+                rew_airborne_r = torch.zeros_like(rew_alive)
         else:
             rew_air_time_biped_r = torch.zeros_like(rew_alive)
             rew_slide_r = torch.zeros_like(rew_alive)
             rew_toe_clear_r = torch.zeros_like(rew_alive)
+            rew_airborne_r = torch.zeros_like(rew_alive)
 
         # --- diagnostics (per-joint-group pose error, always logged) ---
         hip_yaw_err  = torch.abs(inputs.joint_pos[:, 0:2] - inputs.target_standing_pose[:, 0:2]).mean(dim=-1)
@@ -227,7 +234,7 @@ class RewardCfg:
             + rew_toe_r + rew_alt_r + rew_friction_r
             + rew_rate_r + rew_jerk_r
             + rew_jvel_r + rew_jacc_r + rew_torque_r + rew_knee_torque_r + rew_pose_r + rew_height_r
-            + rew_air_time_biped_r + rew_slide_r + rew_toe_clear_r
+            + rew_air_time_biped_r + rew_slide_r + rew_toe_clear_r + rew_airborne_r
         )
 
         components: dict[str, torch.Tensor] = {
@@ -255,6 +262,7 @@ class RewardCfg:
             "feet_air_time_biped":  rew_air_time_biped_r,
             "feet_slide":           rew_slide_r,
             "toe_clearance_biped":  rew_toe_clear_r,
+            "both_feet_airborne":   rew_airborne_r,
             # diagnostics
             "hip_yaw_pose_error":   hip_yaw_err,
             "hip_roll_pose_error":  hip_roll_err,
@@ -280,11 +288,12 @@ POLICIES: dict[str, RewardCfg] = {
         # locomotion
         lin_vel             = -0.0,   # penalize any horizontal movement
         vertical_vel        = -0.0,
-        
+
         # gait rewards
         toe_walking         =  3.0,   # penalty for calves contacting the ground (should be refactored into a penalty)
         feet_air_time_biped =  2.0,
         toe_clearance_biped =  1.0,
+        both_feet_airborne  = -0.5,   # penalty: both feet off ground simultaneously
 
         # reduce jittering
         feet_slide          = -0.0,
@@ -305,13 +314,14 @@ POLICIES: dict[str, RewardCfg] = {
         forward_vel_track   =  2.0,   # H1-style exp tracking toward target velocity
         backward_vel        = -0.0,   # penalize backward motion explicitly
         vertical_vel        = -0.0,
-       
+
         toe_walking         =  3.0,
         feet_air_time_biped =  2.0,
         toe_clearance_biped =  1.0,
+        both_feet_airborne  = -0.5,   # penalty: both feet off ground simultaneously
 
         feet_slide          = -0.0,
-        
+
         action_rate         = -0.005,
         joint_acc           = -1.25e-7,
         jerk                =  0.0,

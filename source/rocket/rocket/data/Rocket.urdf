@@ -199,7 +199,7 @@
   <parent link="Torso_1"/>
   <child link="Hip_L_1"/>
   <axis xyz="0 0 -1"/>
-  <limit upper="0.0872" lower="-0.2618" effort="1000" velocity="100"/>
+  <limit upper="0.0349" lower="-0.0349" effort="1000" velocity="100"/>
 </joint>
 
 <joint name="Revolute2" type="revolute">
@@ -207,7 +207,7 @@
   <parent link="Torso_1"/>
   <child link="Hip_R_1"/>
   <axis xyz="0 0 1"/>
-  <limit upper="0.0872" lower="-0.2618" effort="1000" velocity="100"/>
+  <limit upper="0.0349" lower="-0.0349" effort="1000" velocity="100"/>
 </joint>
 
 <joint name="Revolute3" type="revolute">
