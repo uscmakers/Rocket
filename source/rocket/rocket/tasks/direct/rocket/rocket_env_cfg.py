@@ -245,7 +245,7 @@ class EventCfg:
 @configclass
 class RocketEnvCfg(DirectRLEnvCfg):
     # env
-    decimation = 20
+    decimation = 10
     episode_length_s = 10.0
 
     # set to False to disable all startup domain randomization (mass, gains, COM, friction).
