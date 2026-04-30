@@ -83,6 +83,9 @@ class RocketEnv(DirectRLEnv):
         self.prev_actions      = torch.zeros(self.num_envs, self.cfg.action_space, device=self.device)
         self.prev_prev_actions = torch.zeros(self.num_envs, self.cfg.action_space, device=self.device)
 
+        # consecutive steps with both feet airborne — terminates after max_airborne_steps
+        self._airborne_steps = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device)
+
         # Log dict for reward components and diagnostics
         self.extras["log"] = {}
 
@@ -254,7 +257,14 @@ class RocketEnv(DirectRLEnv):
             torch.abs(self.joint_vel[:, self._joint_ids]) > self.joint_vel_limits, dim=-1
         )  # (N,)
 
-        return tilted | joint_vel_exceeded, time_out
+        # both feet airborne for too many consecutive steps — physically impossible on real hardware
+        contact_time = self.contact_sensor_toes.data.current_contact_time  # (N, 2)
+        both_airborne = (contact_time[:, 0] == 0.0) & (contact_time[:, 1] == 0.0)  # (N,)
+        self._airborne_steps[both_airborne] += 1
+        self._airborne_steps[~both_airborne] = 0
+        airborne_too_long = self._airborne_steps >= self.cfg.max_airborne_steps
+
+        return tilted | joint_vel_exceeded | airborne_too_long, time_out
 
     def _reset_idx(self, env_ids: Sequence[int] | None):
         if env_ids is None:
@@ -267,3 +277,4 @@ class RocketEnv(DirectRLEnv):
         self.prev_actions[env_ids] = 0.0
         self.prev_prev_actions[env_ids] = 0.0
         self.prev_joint_vel[env_ids] = 0.0
+        self._airborne_steps[env_ids] = 0
