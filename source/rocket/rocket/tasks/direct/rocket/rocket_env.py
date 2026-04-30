@@ -204,6 +204,7 @@ class RocketEnv(DirectRLEnv):
             torques              = self.robot.data.applied_torque[:, self._joint_ids],
             reset_terminated     = self.reset_terminated,
             target_standing_pose = self.target_standing_pose,
+            joint_pos_target     = self._delta_target_pos,
             z_height             = self.robot.data.root_pos_w[:, 2],
             calf_forces          = self.contact_sensor_calves.data.net_forces_w,
             toe_forces           = self.contact_sensor_toes.data.net_forces_w,

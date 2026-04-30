@@ -64,6 +64,7 @@ class RewardInput:
     reset_terminated:     torch.Tensor  # (N,)    bool — episode terminated this step
     target_standing_pose: torch.Tensor  # (1, J)  reference joint pose for pose reward
     z_height:             torch.Tensor  # (N,)    root z-height in world frame
+    joint_pos_target:     torch.Tensor  # (N, J)  target joint positions (_delta_target_pos)
     calf_forces:          torch.Tensor  # (N, 2, 3) net contact forces on calves
     toe_forces:           torch.Tensor  # (N, 2, 3) net contact forces on toes
     gait:                 GaitSignals | None = None
