@@ -37,6 +37,7 @@ from .reward_utils import (
     rew_action_rate_penalty,
     rew_jerk_penalty,
     rew_both_feet_airborne,
+    rew_joint_pos_tracking,
 )
 from .reward_gait_utils import GaitSignals, rew_feet_air_time_biped, rew_feet_slide, rew_toe_clearance_biped
 
@@ -134,6 +135,7 @@ class RewardCfg:
     toe_clearance_biped:  float = 0.0  # reward swing toe clearance during single-stance
     toe_clearance_biped_height_m: float = 0.02
     both_feet_airborne:   float = 0.0  # penalize both feet off ground simultaneously
+    joint_pos_tracking:   float = 0.0  # penalize MSE between actual and target joint positions
 
     def compute(
         self,
@@ -190,6 +192,7 @@ class RewardCfg:
         rew_torque_r      = self.torque               * rew_torque_penalty(inputs.torques)
         rew_knee_torque_r = self.knee_torque          * rew_torque_penalty(inputs.torques[:, 4:6])
         rew_pose_r        = self.target_standing_pose * rew_pose(inputs.joint_pos, inputs.target_standing_pose)
+        rew_jpos_track_r  = self.joint_pos_tracking   * rew_joint_pos_tracking(inputs.joint_pos, inputs.joint_pos_target)
         height_error = inputs.z_height - self.height_target
         rew_height_r  = self.height * torch.exp(-torch.square(height_error) / (self.height_sigma * self.height_sigma))
 
@@ -233,7 +236,7 @@ class RewardCfg:
             + rew_lin_vel_r + rew_forward_vel_r + rew_forward_vel_track_r + rew_backward_vel_r + rew_lat_vel_r + rew_vert_vel_r
             + rew_toe_r + rew_alt_r + rew_friction_r
             + rew_rate_r + rew_jerk_r
-            + rew_jvel_r + rew_jacc_r + rew_torque_r + rew_knee_torque_r + rew_pose_r + rew_height_r
+            + rew_jvel_r + rew_jacc_r + rew_torque_r + rew_knee_torque_r + rew_pose_r + rew_height_r + rew_jpos_track_r
             + rew_air_time_biped_r + rew_slide_r + rew_toe_clear_r + rew_airborne_r
         )
 
@@ -263,6 +266,7 @@ class RewardCfg:
             "feet_slide":           rew_slide_r,
             "toe_clearance_biped":  rew_toe_clear_r,
             "both_feet_airborne":   rew_airborne_r,
+            "joint_pos_tracking":   rew_jpos_track_r,
             # diagnostics
             "hip_yaw_pose_error":   hip_yaw_err,
             "hip_roll_pose_error":  hip_roll_err,
@@ -294,6 +298,7 @@ POLICIES: dict[str, RewardCfg] = {
         feet_air_time_biped =  2.0,
         toe_clearance_biped =  1.0,
         both_feet_airborne  = -0.5,   # penalty: both feet off ground simultaneously
+        joint_pos_tracking  = -1.0,   # penalty: MSE between actual and target joint positions
 
         # reduce jittering
         feet_slide          = -0.0,
@@ -318,7 +323,8 @@ POLICIES: dict[str, RewardCfg] = {
         toe_walking         =  3.0,
         feet_air_time_biped =  2.0,
         toe_clearance_biped =  1.0,
-        both_feet_airborne  = -0.5,   # penalty: both feet off ground simultaneously
+        both_feet_airborne  = -3.0,   # penalty: both feet off ground simultaneously
+        joint_pos_tracking  = -5.0,   # penalty: MSE between actual and target joint positions
 
         feet_slide          = -0.0,
 

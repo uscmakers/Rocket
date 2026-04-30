@@ -257,6 +257,23 @@ def rew_jerk_penalty(
 
 
 # =============================================================================
+# JOINT POSITION TRACKING
+# =============================================================================
+
+@torch.jit.script
+def rew_joint_pos_tracking(
+    joint_pos: torch.Tensor,         # (N, J) actual joint positions
+    joint_pos_target: torch.Tensor,  # (N, J) target joint positions
+) -> torch.Tensor:
+    """Mean squared error between actual and target joint positions.
+
+    Returns (N,) >= 0; 0 = perfect tracking. Caller applies negative scale.
+    Using MSE so large deviations are penalized quadratically more than small ones.
+    """
+    return torch.mean(torch.square(joint_pos - joint_pos_target), dim=-1)
+
+
+# =============================================================================
 # JUMPING
 # =============================================================================
 
