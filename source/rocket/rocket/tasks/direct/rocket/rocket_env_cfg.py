@@ -37,7 +37,11 @@ ROCKET_CFG = ArticulationCfg(
                 stiffness=0.0,
                 damping=0.0
             )
-        )
+        ),
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(  # 👈 here
+            solver_position_iteration_count=8,
+            solver_velocity_iteration_count=4,
+        ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.16),  # Initial position (spawn at 0.3m height)
