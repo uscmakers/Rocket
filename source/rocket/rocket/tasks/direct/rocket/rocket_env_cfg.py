@@ -264,9 +264,8 @@ class RocketEnvCfg(DirectRLEnvCfg):
             restitution=0.0,
         ),
         physx=sim_utils.PhysxCfg(
-            bounce_threshold_velocity=0.2,
-            num_position_iterations=8,
-            num_velocity_iterations=4,
+            solver_position_iteration_count=8,
+            solver_velocity_iteration_count=4,
         )
     )
 
