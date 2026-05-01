@@ -297,10 +297,9 @@ POLICIES: dict[str, RewardCfg] = {
         # gait rewards
         toe_walking         =  3.0,   # penalty for calves contacting the ground (should be refactored into a penalty)
         feet_air_time_biped =  2.0,
-        feet_air_time_biped_threshold_s = 0.15,
         toe_clearance_biped =  1.0,
-        both_feet_airborne  =  0.0,   # handled by termination condition
-        joint_pos_tracking  = -1.0,
+        both_feet_airborne  = -0.5,   # penalty: both feet off ground simultaneously
+        joint_pos_tracking  = -1.0,   # penalty: MSE between actual and target joint positions
 
         # reduce jittering
         feet_slide          = -0.0,
@@ -318,16 +317,15 @@ POLICIES: dict[str, RewardCfg] = {
         height              =  1.0,
 
         forward_vel         =  0.0,
-        forward_vel_track   =  2.0,
-        backward_vel        = -0.0,
+        forward_vel_track   =  2.0,   # H1-style exp tracking toward target velocity
+        backward_vel        = -0.0,   # penalize backward motion explicitly
         vertical_vel        = -0.0,
 
         toe_walking         =  3.0,
         feet_air_time_biped =  2.0,
-        feet_air_time_biped_threshold_s = 0.15,
         toe_clearance_biped =  1.0,
-        both_feet_airborne  =  0.0,   # handled by termination condition
-        joint_pos_tracking  = -10.0,
+        both_feet_airborne  = -3.0,   # penalty: both feet off ground simultaneously
+        joint_pos_tracking  = -10.0,   # penalty: MSE between actual and target joint positions
 
         feet_slide          = -0.0,
 

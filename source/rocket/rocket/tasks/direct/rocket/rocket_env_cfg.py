@@ -295,5 +295,4 @@ class RocketEnvCfg(DirectRLEnvCfg):
     rewards: RewardCfg = RewardCfg()  # overwritten at env init from POLICIES[policy_type]
 
     # termination conditions
-    max_tilt_distance = 0.5   # max tilt before termination
-    max_airborne_steps = 2    # consecutive steps with both feet off ground before termination
+    max_tilt_distance = 0.5  # max tilt before termination
