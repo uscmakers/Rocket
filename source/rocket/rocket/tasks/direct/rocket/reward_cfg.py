@@ -27,6 +27,7 @@ from .reward_utils import (
     rew_heading_vel,
     rew_forward_vel_tracking,
     rew_vertical_vel_penalty,
+    rew_forward_vel_l2_deadzone,
     rew_toe_walking,
     rew_alternating_contact,
     rew_friction_cone_penalty,
@@ -106,6 +107,9 @@ class RewardCfg:
     backward_vel:         float = 0.0
     lat_vel:              float = 0.0
     vertical_vel:         float = 0.0
+    # standing-in-place velocity bowl (deadzone + L2)
+    forward_vel_l2:       float = 0.0
+    forward_vel_threshold: float = 0.02  # m/s deadzone for near-zero drift
 
     # contact quality
     toe_walking:          float = 0.0
@@ -170,6 +174,7 @@ class RewardCfg:
         rew_backward_vel_r    = self.backward_vel  * torch.relu(-forward_vel)
         rew_lat_vel_r         = self.lat_vel       * torch.square(lateral_vel)
         rew_vert_vel_r        = self.vertical_vel  * rew_vertical_vel_penalty(inputs.root_lin_vel_w)
+        rew_forward_vel_l2_r  = self.forward_vel_l2 * rew_forward_vel_l2_deadzone(forward_vel, self.forward_vel_threshold)
 
         # --- contact quality ---
         rew_toe_r      = self.toe_walking         * rew_toe_walking(inputs.calf_forces, inputs.toe_forces)
@@ -231,7 +236,7 @@ class RewardCfg:
         total = (
             rew_alive + rew_term
             + rew_up + rew_flat_r
-            + rew_lin_vel_r + rew_forward_vel_r + rew_forward_vel_track_r + rew_backward_vel_r + rew_lat_vel_r + rew_vert_vel_r
+            + rew_lin_vel_r + rew_forward_vel_r + rew_forward_vel_track_r + rew_backward_vel_r + rew_lat_vel_r + rew_vert_vel_r + rew_forward_vel_l2_r
             + rew_toe_r + rew_alt_r + rew_friction_r
             + rew_rate_r + rew_jerk_r
             + rew_jvel_r + rew_jacc_r + rew_torque_r + rew_knee_torque_r + rew_pose_r + rew_height_r + rew_jpos_track_r
@@ -249,6 +254,7 @@ class RewardCfg:
             "backward_vel":         rew_backward_vel_r,
             "lat_vel":              rew_lat_vel_r,
             "vertical_vel":         rew_vert_vel_r,
+            "forward_vel_l2":       rew_forward_vel_l2_r,
             "toe_walking":          rew_toe_r,
             "alternating_contact":  rew_alt_r,
             "friction_cone":        rew_friction_r,
@@ -290,6 +296,8 @@ POLICIES: dict[str, RewardCfg] = {
         # locomotion
         lin_vel             = -0.0,
         vertical_vel        = -0.0,
+        forward_vel_l2      = -0.5,
+        forward_vel_threshold = 0.02,
 
         # gait rewards
         toe_walking         =  3.0,

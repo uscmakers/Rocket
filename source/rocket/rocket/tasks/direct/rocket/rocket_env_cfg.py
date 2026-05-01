@@ -77,7 +77,7 @@ class RocketSceneCfg(InteractiveSceneCfg):
         debug_vis=True,
         # Torso mesh bottom is at Z=0 in link frame (center XY=0,0).
         # Place IMU 3 inches (0.0762 m) above bottom, centered in XY.
-        offset=ImuCfg.OffsetCfg(pos=(0.0, 0.0, 0.05)),
+        offset=ImuCfg.OffsetCfg(pos=(0.0, 0.0, 0.09525)),
     )
 
     contact_sensor_calves: ContactSensorCfg = ContactSensorCfg(

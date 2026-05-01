@@ -142,6 +142,21 @@ def rew_vertical_vel_penalty(root_lin_vel_w: torch.Tensor) -> torch.Tensor:
     """Squared vertical (z) velocity. Returns (N,); caller applies negative scale."""
     return torch.square(root_lin_vel_w[:, 2])
 
+@torch.jit.script
+def rew_forward_vel_l2_deadzone(forward_vel: torch.Tensor, threshold: float) -> torch.Tensor:
+    """Deadzone + quadratic bowl penalty on forward velocity magnitude.
+
+    Returns:
+        (N,) where:
+            0 inside the deadzone (|v_fwd| <= threshold)
+            (|v_fwd| - threshold)^2 outside the deadzone
+
+    This is a smoother alternative to `abs(forward_vel)` for standing-in-place
+    policies, and avoids using IMU acceleration signals.
+    """
+    excess = torch.relu(torch.abs(forward_vel) - threshold)
+    return torch.square(excess)
+
 
 # =============================================================================
 # CONTACT
