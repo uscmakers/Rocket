@@ -34,10 +34,13 @@ class StepperActuator(ActuatorBase):
 
     cfg: "StepperActuatorCfg"
 
+    def __post_init__(self):
+        super().__post_init__()
+        self._prev_torque: torch.Tensor | None = None
+
     def reset(self, env_ids: Sequence[int]):
-        prev = getattr(self, "_prev_torque", None)
-        if prev is not None:
-            prev[env_ids] = 0.0
+        if self._prev_torque is not None:
+            self._prev_torque[env_ids] = 0.0
 
     def compute(
         self,
@@ -45,7 +48,7 @@ class StepperActuator(ActuatorBase):
         joint_pos: torch.Tensor,
         joint_vel: torch.Tensor,
     ) -> ArticulationActions:
-        if getattr(self, "_prev_torque", None) is None:
+        if self._prev_torque is None:
             self._prev_torque = torch.zeros_like(joint_pos)
 
         pos_error = control_action.joint_positions - joint_pos
