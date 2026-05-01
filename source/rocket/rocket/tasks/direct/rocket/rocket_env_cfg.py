@@ -9,7 +9,6 @@ from pathlib import Path
 import isaaclab.envs.mdp as mdp
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
-from rocket.actuators import StepperActuatorCfg
 from isaaclab.assets import ArticulationCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.managers import EventTermCfg as EventTerm, SceneEntityCfg
@@ -52,23 +51,19 @@ ROCKET_CFG = ArticulationCfg(
             stiffness=120.0,   # position-controlled: needs spring stiffness
             damping=10.0,
         ),
-        "hip_steppers": StepperActuatorCfg(
+        "hip_steppers": ImplicitActuatorCfg(
             joint_names_expr=["Revolute3", "Revolute4"],
-            effort_limit=3.0,
+            effort_limit=3,
             velocity_limit=6.2,
             stiffness=200.0,
-            damping=0.0,
-            velocity_gain=5.0,
-            position_deadband=0.005,
+            damping=10.0,
         ),
-        "knee_steppers": StepperActuatorCfg(
+        "knee_steppers": ImplicitActuatorCfg(
             joint_names_expr=["Revolute5", "Revolute6"],
-            effort_limit=5.0,
+            effort_limit=5,
             velocity_limit=6.2,
             stiffness=200.0,
-            damping=0.0,
-            velocity_gain=5.0,
-            position_deadband=0.005,
+            damping=10.0,
         ),
     },
 )
