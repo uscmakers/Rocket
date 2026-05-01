@@ -22,6 +22,9 @@ import torch
 import torch.nn as nn
 import yaml
 
+from rl_games.common import env_configurations, vecenv
+from isaaclab_rl.rl_games import RlGamesGpuEnv, RlGamesVecEnvWrapper
+
 
 class _ActorWrapper(nn.Module):
     """Wraps an rl_games model for deterministic inference: obs -> action means.
