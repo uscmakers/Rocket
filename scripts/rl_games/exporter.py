@@ -22,72 +22,6 @@ import torch
 import torch.nn as nn
 import yaml
 
-# add argparse arguments
-parser = argparse.ArgumentParser(description="Export an rl_games .pth checkpoint to ONNX.")
-parser.add_argument("--policy", required=True, help="Path to the .pth checkpoint.")
-parser.add_argument(
-    "--agent-cfg",
-    default=str(
-        Path(__file__).resolve().parents[2]
-        / "source"
-        / "rocket"
-        / "rocket"
-        / "tasks"
-        / "direct"
-        / "rocket"
-        / "agents"
-        / "rl_games_ppo_cfg.yaml"
-    ),
-    help="Path to the rl_games agent YAML.",
-)
-parser.add_argument(
-    "--output",
-    default="",
-    help="Output .onnx path. Defaults to rocket_direct.onnx next to the policy.",
-)
-parser.add_argument("--task", type=str, default="Template-Rocket-Direct-v0", help="Name of the task.")
-parser.add_argument(
-    "--agent",
-    type=str,
-    default="rl_games_cfg_entry_point",
-    help="Name of the RL agent configuration entry point.",
-)
-parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
-
-# append AppLauncher cli args
-AppLauncher.add_app_launcher_args(parser)
-# parse the arguments
-args_cli, hydra_args = parser.parse_known_args()
-
-# clear out sys.argv for Hydra
-sys.argv = [sys.argv[0]] + hydra_args
-
-# launch omniverse app
-app_launcher = AppLauncher(args_cli)
-simulation_app = app_launcher.app
-
-"""Rest everything follows."""
-
-import gymnasium as gym
-from rl_games.common import env_configurations, vecenv
-from rl_games.common.player import BasePlayer
-from rl_games.torch_runner import Runner
-
-from isaaclab.envs import (
-    DirectMARLEnv,
-    DirectMARLEnvCfg,
-    DirectRLEnvCfg,
-    ManagerBasedRLEnvCfg,
-    multi_agent_to_single_agent,
-)
-
-from isaaclab_rl.rl_games import RlGamesGpuEnv, RlGamesVecEnvWrapper
-
-import isaaclab_tasks  # noqa: F401
-from isaaclab_tasks.utils.hydra import hydra_task_config
-
-import rocket.tasks  # noqa: F401
-
 
 class _ActorWrapper(nn.Module):
     """Wraps an rl_games model for deterministic inference: obs -> action means.
@@ -177,9 +111,123 @@ def _register_rlgpu_env(env, rl_device: str, agent_cfg: dict) -> None:
     env_configurations.register("rlgpu", {"vecenv_type": "IsaacRlgWrapper", "env_creator": lambda **kwargs: env})
 
 
-@hydra_task_config(args_cli.task, args_cli.agent)
-def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, _agent_cfg: dict):
-    policy_path = os.path.abspath(args_cli.policy)
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Export an rl_games .pth checkpoint to ONNX.")
+    parser.add_argument("--policy", required=True, help="Path to the .pth checkpoint.")
+    parser.add_argument(
+        "--agent-cfg",
+        default=str(
+            Path(__file__).resolve().parents[2]
+            / "source"
+            / "rocket"
+            / "rocket"
+            / "tasks"
+            / "direct"
+            / "rocket"
+            / "agents"
+            / "rl_games_ppo_cfg.yaml"
+        ),
+        help="Path to the rl_games agent YAML.",
+    )
+    parser.add_argument(
+        "--output",
+        default="",
+        help="Output .onnx path. Defaults to rocket_direct.onnx next to the policy.",
+    )
+    parser.add_argument("--task", type=str, default="Template-Rocket-Direct-v0", help="Name of the task.")
+    parser.add_argument(
+        "--agent",
+        type=str,
+        default="rl_games_cfg_entry_point",
+        help="Name of the RL agent configuration entry point.",
+    )
+    parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
+    AppLauncher.add_app_launcher_args(parser)
+    return parser
+
+
+def main(args_cli: argparse.Namespace) -> None:
+    import gymnasium as gym
+    from rl_games.common import env_configurations, vecenv
+    from rl_games.common.player import BasePlayer
+    from rl_games.torch_runner import Runner
+
+    from isaaclab.envs import (
+        DirectMARLEnv,
+        DirectMARLEnvCfg,
+        DirectRLEnvCfg,
+        ManagerBasedRLEnvCfg,
+        multi_agent_to_single_agent,
+    )
+
+    from isaaclab_rl.rl_games import RlGamesGpuEnv, RlGamesVecEnvWrapper
+
+    import isaaclab_tasks  # noqa: F401
+    from isaaclab_tasks.utils.hydra import hydra_task_config
+
+    import rocket.tasks  # noqa: F401
+
+    @hydra_task_config(args_cli.task, args_cli.agent)
+    def _run_export(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, _agent_cfg: dict):
+        policy_path = os.path.abspath(args_cli.policy)
+        if not os.path.exists(policy_path):
+            raise FileNotFoundError(f"Checkpoint not found: {policy_path}")
+
+        agent_cfg = _load_agent_cfg(args_cli.agent_cfg)
+        agent_cfg.setdefault("params", {})
+        agent_cfg["params"].setdefault("env", {})
+        agent_cfg["params"].setdefault("config", {})
+
+        env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
+        env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
+
+        # remove camera configs if enable cameras is not enabled
+        if not args_cli.enable_cameras and hasattr(env_cfg.scene, "tiled_camera"):
+            del env_cfg.scene.tiled_camera
+
+        env = gym.make(args_cli.task, cfg=env_cfg)
+        if isinstance(env.unwrapped, DirectMARLEnv):
+            env = multi_agent_to_single_agent(env)
+
+        rl_device = agent_cfg["params"]["config"].get("device", env_cfg.sim.device)
+        _register_rlgpu_env(env, rl_device, agent_cfg)
+
+        agent_cfg["params"]["load_checkpoint"] = True
+        agent_cfg["params"]["load_path"] = policy_path
+        agent_cfg["params"]["config"]["num_actors"] = env.unwrapped.num_envs
+
+        runner = Runner()
+        runner.load(agent_cfg)
+        export_agent: BasePlayer = runner.create_player()
+        export_agent.restore(policy_path)
+        export_agent.reset()
+
+        obs_size = int(export_agent.obs_shape[0])
+        wrapper = _ActorWrapper(export_agent.model).cpu().eval()
+        dummy_obs = torch.zeros(1, obs_size)
+
+        policy_dir = os.path.dirname(policy_path)
+        output_path = args_cli.output or os.path.join(policy_dir, "rocket_direct.onnx")
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+
+        torch.onnx.export(
+            wrapper,
+            dummy_obs,
+            output_path,
+            export_params=True,
+            opset_version=18,
+            verbose=False,
+            input_names=["obs"],
+            output_names=["actions"],
+            dynamic_axes={},
+        )
+        print(f"[INFO] Exported ONNX to: {output_path}")
+
+        env.close()
+
+    _run_export()
     if not os.path.exists(policy_path):
         raise FileNotFoundError(f"Checkpoint not found: {policy_path}")
 
@@ -239,5 +287,15 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, _age
 
 
 if __name__ == "__main__":
-    main()
+    parser = _build_parser()
+    args_cli, hydra_args = parser.parse_known_args()
+
+    # clear out sys.argv for Hydra
+    sys.argv = [sys.argv[0]] + hydra_args
+
+    # launch omniverse app
+    app_launcher = AppLauncher(args_cli)
+    simulation_app = app_launcher.app
+
+    main(args_cli)
     simulation_app.close()
