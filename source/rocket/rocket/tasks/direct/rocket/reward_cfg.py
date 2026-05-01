@@ -98,10 +98,10 @@ class RewardCfg:
     flat_orientation_l2:  float = 0.0  # shifted bowl penalty; set negative to penalize
     # target projected_gravity XY in body frame — shifts the bowl minimum away from perfectly vertical.
     # (0, 0) = vertical; (0, -0.0664) = 3.8° forward lean (COM over support center).
-    flat_orientation_l2_target_xy: tuple[float, float] = (0.0, 0.0)
+    flat_orientation_l2_target_xy: tuple[float, float] = (0.0, -0.0664)
 
     # velocity
-    lin_vel:              float = -1.0  # penalize |forward_vel| — any horiz movement (standing)
+    lin_vel:              float = 0.0  # penalize |forward_vel| — any horiz movement (standing)
     forward_vel:          float = 0.0  # reward signed forward vel (walking)
     forward_vel_track:    float = 0.0  # H1-style exp tracking: exp(-||v - target||² / σ²)
     forward_vel_target:   float = 0.05  # target forward velocity in m/s (default 0.4)
@@ -112,7 +112,7 @@ class RewardCfg:
 
     # contact quality
     toe_walking:          float = 0.0  # penalize calf ground contact
-    alternating_contact:  float = 0.0  # reward alternating foot contact
+    alternating_contact:  float = 1.0  # reward alternating foot contact
     friction_cone:        float = 0.0  # penalize lateral vs normal force ratio on toes
 
     # smoothness
@@ -291,24 +291,24 @@ POLICIES: dict[str, RewardCfg] = {
         height              =  1.0,
 
         # locomotion
-        lin_vel             = -1.0,   # penalize any horizontal movement
-        vertical_vel        = -0.5,
+        lin_vel             = -0.0,   # penalize any horizontal movement
+        vertical_vel        = -0.0,
 
         # gait rewards
         toe_walking         =  3.0,   # penalty for calves contacting the ground (should be refactored into a penalty)
         feet_air_time_biped =  0.0,
         toe_clearance_biped =  0.0,
         both_feet_airborne  =  0.0,   # handled by termination condition
-        joint_pos_tracking  = -2.0,
+        joint_pos_tracking  = -10.0,
 
         # reduce jittering
         feet_slide          = -0.0,
         friction_cone       = -0.0,   # penalize lateral vs normal force ratio on toes
 
         # action smoothness
-        action_rate         = -0.01,
+        action_rate         = -0.005,
         jerk                = -0.0,
-        joint_acc           = -5e-7,
+        joint_acc           = -1.25e-7,
     ),
 
     "walking": RewardCfg(
