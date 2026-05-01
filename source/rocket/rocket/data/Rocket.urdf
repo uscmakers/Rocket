@@ -231,7 +231,7 @@
   <parent link="Thigh_L_1"/>
   <child link="Calf_L_1"/>
   <axis xyz="-1.0 0 0"/>
-  <limit upper="0.2618" lower="-0.3490" effort="1000" velocity="100"/>
+  <limit upper="0.1" lower="-0.3490" effort="1000" velocity="100"/>
 </joint>
 
 <joint name="Revolute6" type="revolute">
@@ -239,7 +239,7 @@
   <parent link="Thigh_R_1"/>
   <child link="Calf_R_1"/>
   <axis xyz="-1.0 0 0"/>
-  <limit upper="0.2618" lower="-0.3490" effort="1000" velocity="100"/>
+  <limit upper="0.1" lower="-0.3490" effort="1000" velocity="100"/>
 </joint>
 
 <joint name="Rigid7" type="fixed">

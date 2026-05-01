@@ -63,7 +63,7 @@ ROCKET_CFG = ArticulationCfg(
         ),
         "knee_steppers": StepperActuatorCfg(
             joint_names_expr=["Revolute5", "Revolute6"],
-            effort_limit=6.0,
+            effort_limit=5.0,
             velocity_limit=6.2,
             stiffness=200.0,
             damping=10.0,
