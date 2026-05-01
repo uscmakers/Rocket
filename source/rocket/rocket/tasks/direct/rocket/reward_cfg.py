@@ -104,7 +104,7 @@ class RewardCfg:
     lin_vel:              float = 0.0  # penalize |forward_vel| — any horiz movement (standing)
     forward_vel:          float = 0.0  # reward signed forward vel (walking)
     forward_vel_track:    float = 0.0  # H1-style exp tracking: exp(-||v - target||² / σ²)
-    forward_vel_target:   float = 0.05  # target forward velocity in m/s (default 0.4)
+    forward_vel_target:   float = 0.1  # target forward velocity in m/s (default 0.4)
     forward_vel_sigma:    float = 0.025 # tolerance width (H1 uses 0.25)
     backward_vel:         float = 0.0  # penalize backward motion: relu(-forward_vel)
     lat_vel:              float = 0.0  # penalize lateral drift (squared)
@@ -131,7 +131,7 @@ class RewardCfg:
 
     # gait (optional; requires ContactSensorCfg(track_air_time=True) on toes)
     feet_air_time_biped:  float = 0.0  # single-stance shaping based on air/contact timers
-    feet_air_time_biped_threshold_s: float = 0.15
+    feet_air_time_biped_threshold_s: float = 0.25
     feet_slide:           float = 0.0  # penalize toe sliding when in force-threshold contact
     toe_clearance_biped:  float = 0.0  # reward swing toe clearance during single-stance
     toe_clearance_biped_height_m: float = 0.02
@@ -323,7 +323,8 @@ POLICIES: dict[str, RewardCfg] = {
         vertical_vel        = -0.0,
 
         toe_walking         =  3.0,
-        feet_air_time_biped =  1.0,
+        feet_air_time_biped =  2.0,
+        feet_air_time_biped_threshold_s = 0.15,
         toe_clearance_biped =  1.0,
         both_feet_airborne  =  0.0,   # handled by termination condition
         joint_pos_tracking  = -10.0,
