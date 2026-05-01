@@ -126,7 +126,7 @@ class RewardCfg:
     knee_torque:          float = 0.0  # knee steppers only (joints 4:6)
     target_standing_pose: float = 0.0
     height:               float = 0.0   # exp tracking: exp(-||z - target||² / σ²)
-    height_target:        float = 0.14  # target z_height in m (IMU height at nominal stance)
+    height_target:        float = 0.15  # target z_height in m (IMU height at nominal stance)
     height_sigma:         float = 0.01  # tolerance width in m
 
     # gait (optional; requires ContactSensorCfg(track_air_time=True) on toes)
@@ -299,7 +299,7 @@ POLICIES: dict[str, RewardCfg] = {
         feet_air_time_biped =  0.0,
         toe_clearance_biped =  0.0,
         both_feet_airborne  =  0.0,   # handled by termination condition
-        joint_pos_tracking  = -10.0,
+        joint_pos_tracking  = -0.0,
 
         # reduce jittering
         feet_slide          = -0.0,
@@ -325,7 +325,7 @@ POLICIES: dict[str, RewardCfg] = {
         feet_air_time_biped =  1.0,
         toe_clearance_biped =  1.0,
         both_feet_airborne  =  0.0,   # handled by termination condition
-        joint_pos_tracking  = -10.0,
+        joint_pos_tracking  = -0.0,
 
         feet_slide          = -0.0,
 

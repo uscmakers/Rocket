@@ -82,7 +82,7 @@ class RocketSceneCfg(InteractiveSceneCfg):
         debug_vis=True,
         # Torso mesh bottom is at Z=0 in link frame (center XY=0,0).
         # Place IMU 3 inches (0.0762 m) above bottom, centered in XY.
-        offset=ImuCfg.OffsetCfg(pos=(0.0, 0.0, 0.05)),
+        offset=ImuCfg.OffsetCfg(pos=(0.0, 0.0, 0.0762)),
     )
 
     contact_sensor_calves: ContactSensorCfg = ContactSensorCfg(
@@ -102,7 +102,7 @@ class RocketSceneCfg(InteractiveSceneCfg):
     # Camera for video recording - 45° angle view
     tiled_camera: TiledCameraCfg = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Camera",
-        update_period=0.0,
+        update_period=0.01,
         offset=TiledCameraCfg.OffsetCfg(
             pos=(2.0, 0.0, 1.5),  # 2m back, 1.5m up
             rot=(0.9239, 0.0, 0.3827, 0.0),  # ~45° pitch down
@@ -159,8 +159,8 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "stiffness_distribution_params": (0.90, 1.10),  # ±10% (was ±25% — too aggressive for early training)
-            "damping_distribution_params": (0.90, 1.10),
+            "stiffness_distribution_params": (1.0, 1.0),  # ±10% (was ±25% — too aggressive for early training)
+            "damping_distribution_params": (1.0, 1.0),
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -204,17 +204,20 @@ class EventCfg:
 
     # ±0.05 m/s derived from H1 (±0.5 m/s, 1.8m tall) scaled by height ratio to Rocket (0.16m):
     # 0.5 × (0.16/1.8) ≈ 0.044 m/s → rounded to 0.05. Same angular disturbance, right robot scale.
+    '''
     push_robot = EventTerm(
         func=mdp.push_by_setting_velocity,
         mode="interval",
         interval_range_s=(4.0, 8.0),
         params={"velocity_range": {"y": (-0.01, 0.01)}},
     )
+    '''
 
     # -------------------------------------------------------------------------
     # MEDIUM IMPACT — startup (manufacturing shifts center of mass)
     # -------------------------------------------------------------------------
 
+    '''
     randomize_com = EventTerm(
         func=mdp.randomize_rigid_body_com,
         mode="startup",
@@ -223,6 +226,7 @@ class EventCfg:
             "com_range": {"x": (-0.005, 0.005), "y": (-0.005, 0.005), "z": (-0.005, 0.005)},  # ±5 mm
         },
     )
+    '''
 
     # -------------------------------------------------------------------------
     # LOW IMPACT — startup (floor surface friction varies by environment)
@@ -245,7 +249,7 @@ class EventCfg:
 @configclass
 class RocketEnvCfg(DirectRLEnvCfg):
     # env
-    decimation = 20
+    decimation = 10
     episode_length_s = 10.0
 
     # set to False to disable all startup domain randomization (mass, gains, COM, friction).
@@ -301,4 +305,4 @@ class RocketEnvCfg(DirectRLEnvCfg):
 
     # termination conditions
     max_tilt_distance = 0.5   # max tilt before termination
-    max_airborne_steps = 2    # consecutive steps with both feet off ground before termination
+    max_airborne_steps = 5    # consecutive steps with both feet off ground before termination

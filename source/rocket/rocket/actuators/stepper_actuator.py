@@ -101,9 +101,9 @@ class StepperActuatorCfg(ActuatorBaseCfg):
     """Max torque change per physics step (Nm/step). inf = no ramp (instant).
     Fit from hardware current ramp measurements."""
 
-    corner_speed: float = float("inf")
+    corner_speed: float = 8.0
     """Output shaft speed (rad/s) at which available torque drops to 50% of effort_limit.
-    Default inf = disabled (flat effort_limit). MKS SERVO57C estimate: ~8.0 rad/s."""
+    MKS SERVO57C at 48V: motor corner ~400 RPM / 5 gear = 80 RPM output = 8.4 rad/s."""
 
     coulomb_friction: float = 0.0
     """Constant friction torque (Nm) opposing joint motion. 0 = disabled.
