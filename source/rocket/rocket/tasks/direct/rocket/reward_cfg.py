@@ -79,10 +79,7 @@ class RewardInput:
 class RewardCfg:
     """Per-policy reward scales.
 
-    Defaults:
-        alive      =  5.0  (always active)
-        terminated = -5.0  (always active)
-        everything else = 0.0
+    Defaults match the YAML config exactly.
 
     Usage:
         cfg = RewardCfg(upright=3.0, lin_vel=-1.0, action_rate=-0.2)
@@ -91,52 +88,52 @@ class RewardCfg:
 
     # survival — always active, shared across all policies
     alive:                float = 10.0
-    terminated:           float = -0.0
+    terminated:           float = -0.0   # YAML: -0.0
 
     # balance
-    upright:              float = 0.0
-    flat_orientation_l2:  float = 0.0  # shifted bowl penalty; set negative to penalize
+    upright:              float = 0.0    # YAML: 0.0
+    flat_orientation_l2:  float = 0.0
     # target projected_gravity XY in body frame — shifts the bowl minimum away from perfectly vertical.
     # (0, 0) = vertical; (0, -0.0664) = 3.8° forward lean (COM over support center).
     flat_orientation_l2_target_xy: tuple[float, float] = (0.0, -0.0664)
 
     # velocity
-    lin_vel:              float = 0.0  # penalize |forward_vel| — any horiz movement (standing)
-    forward_vel:          float = 0.0  # reward signed forward vel (walking)
-    forward_vel_track:    float = 0.0  # H1-style exp tracking: exp(-||v - target||² / σ²)
-    forward_vel_target:   float = 0.1  # target forward velocity in m/s (default 0.4)
-    forward_vel_sigma:    float = 0.025 # tolerance width (H1 uses 0.25)
-    backward_vel:         float = 0.0  # penalize backward motion: relu(-forward_vel)
-    lat_vel:              float = 0.0  # penalize lateral drift (squared)
-    vertical_vel:         float = 0.0  # penalize vertical bouncing (squared)
+    lin_vel:              float = 0.0
+    forward_vel:          float = 0.0
+    forward_vel_track:    float = 0.0
+    forward_vel_target:   float = 0.1    # YAML: 0.1
+    forward_vel_sigma:    float = 0.025
+    backward_vel:         float = 0.0
+    lat_vel:              float = 0.0
+    vertical_vel:         float = 0.0
 
     # contact quality
-    toe_walking:          float = 0.0  # penalize calf ground contact
-    alternating_contact:  float = 0.0  # reward alternating foot contact
-    friction_cone:        float = 0.0  # penalize lateral vs normal force ratio on toes
+    toe_walking:          float = 0.0
+    alternating_contact:  float = 0.0   # YAML: 0.0
+    friction_cone:        float = 0.0
 
     # smoothness
-    action_rate:          float = 0.0  # penalize rapid command changes (squared delta)
-    jerk:                 float = 0.0  # penalize second-order command changes
+    action_rate:          float = 0.0
+    jerk:                 float = 0.0
 
     # inactive by default — enable as needed
     joint_vel:            float = 0.0
     joint_acc:            float = 0.0
-    torque:               float = 0.0  # all joints (N, J)
-    knee_torque:          float = 0.0  # knee steppers only (joints 4:6)
+    torque:               float = 0.0
+    knee_torque:          float = 0.0
     target_standing_pose: float = 0.0
-    height:               float = 0.0   # exp tracking: exp(-||z - target||² / σ²)
-    height_target:        float = 0.14  # target z_height in m (IMU height at nominal stance)
-    height_sigma:         float = 0.01  # tolerance width in m
+    height:               float = 0.0
+    height_target:        float = 0.14
+    height_sigma:         float = 0.01
 
     # gait (optional; requires ContactSensorCfg(track_air_time=True) on toes)
-    feet_air_time_biped:  float = 0.0  # single-stance shaping based on air/contact timers
-    feet_air_time_biped_threshold_s: float = 0.25
-    feet_slide:           float = 0.0  # penalize toe sliding when in force-threshold contact
-    toe_clearance_biped:  float = 0.0  # reward swing toe clearance during single-stance
+    feet_air_time_biped:  float = 0.0
+    feet_air_time_biped_threshold_s: float = 0.25  # YAML: 0.25
+    feet_slide:           float = 0.0
+    toe_clearance_biped:  float = 0.0
     toe_clearance_biped_height_m: float = 0.02
-    both_feet_airborne:   float = 0.0  # penalize both feet off ground simultaneously
-    joint_pos_tracking:   float = 0.0  # penalize MSE between actual and target joint positions
+    both_feet_airborne:   float = 0.0
+    joint_pos_tracking:   float = 0.0
 
     def compute(
         self,
@@ -177,7 +174,6 @@ class RewardCfg:
         # --- contact quality ---
         rew_toe_r      = self.toe_walking         * rew_toe_walking(inputs.calf_forces, inputs.toe_forces)
         rew_alt_r      = self.alternating_contact  * rew_alternating_contact(inputs.toe_forces)
-        # friction_cone uses same force-threshold contact mask as feet_slide (from gait signals)
         if inputs.gait is not None and inputs.gait.contacts_force is not None:
             rew_friction_r = self.friction_cone * rew_friction_cone_penalty(inputs.toe_forces, inputs.gait.contacts_force)
         else:
@@ -194,6 +190,7 @@ class RewardCfg:
         rew_knee_torque_r = self.knee_torque          * rew_torque_penalty(inputs.torques[:, 4:6])
         rew_pose_r        = self.target_standing_pose * rew_pose(inputs.joint_pos, inputs.target_standing_pose)
         rew_jpos_track_r  = self.joint_pos_tracking   * rew_joint_pos_tracking(inputs.joint_pos, inputs.joint_pos_target)
+        # Two-sided height penalty (matches YAML/reset e024eaf behaviour — no relu)
         height_error = inputs.z_height - self.height_target
         rew_height_r  = self.height * torch.exp(-torch.square(height_error) / (self.height_sigma * self.height_sigma))
 
@@ -279,7 +276,7 @@ class RewardCfg:
 
 # =============================================================================
 # POLICY REGISTRY
-# Only set non-zero scales — alive/terminated are always ±5.0 by default.
+# Only set non-zero scales — alive/terminated are always ±10.0/0.0 by default.
 # =============================================================================
 
 POLICIES: dict[str, RewardCfg] = {
@@ -287,23 +284,23 @@ POLICIES: dict[str, RewardCfg] = {
     "standing": RewardCfg(
         # uprightness & balance
         upright             =  0.0,
-        flat_orientation_l2 = -1.0,   # this is a softer tilt penalty with softer gradients closer to upright vector
+        flat_orientation_l2 = -1.0,
         height              =  1.0,
 
         # locomotion
-        lin_vel             = -0.0,   # penalize any horizontal movement
+        lin_vel             = -0.0,
         vertical_vel        = -0.0,
 
         # gait rewards
-        toe_walking         =  3.0,   # penalty for calves contacting the ground (should be refactored into a penalty)
+        toe_walking         =  3.0,
         feet_air_time_biped =  2.0,
         toe_clearance_biped =  1.0,
-        both_feet_airborne  = -0.5,   # penalty: both feet off ground simultaneously
-        joint_pos_tracking  = -1.0,   # penalty: MSE between actual and target joint positions
+        both_feet_airborne  = -0.5,
+        joint_pos_tracking  = -1.0,
 
         # reduce jittering
         feet_slide          = -0.0,
-        friction_cone       = -0.0,   # penalize lateral vs normal force ratio on toes
+        friction_cone       = -0.0,
 
         # action smoothness
         action_rate         = -0.005,
@@ -313,19 +310,19 @@ POLICIES: dict[str, RewardCfg] = {
 
     "walking": RewardCfg(
         upright             =  0.0,
-        flat_orientation_l2 = -1.0,
+        flat_orientation_l2 = -0.5,
         height              =  1.0,
 
         forward_vel         =  0.0,
-        forward_vel_track   =  2.0,   # H1-style exp tracking toward target velocity
-        backward_vel        = -0.0,   # penalize backward motion explicitly
+        forward_vel_track   =  2.0,
+        backward_vel        = -0.0,
         vertical_vel        = -0.0,
 
         toe_walking         =  3.0,
         feet_air_time_biped =  2.0,
         toe_clearance_biped =  1.0,
-        both_feet_airborne  = -3.0,   # penalty: both feet off ground simultaneously
-        joint_pos_tracking  = -10.0,   # penalty: MSE between actual and target joint positions
+        both_feet_airborne  = -0.5,
+        joint_pos_tracking  = -0.0,
 
         feet_slide          = -0.0,
 
