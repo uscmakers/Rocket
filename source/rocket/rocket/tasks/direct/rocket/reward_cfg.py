@@ -194,7 +194,7 @@ class RewardCfg:
         rew_knee_torque_r = self.knee_torque          * rew_torque_penalty(inputs.torques[:, 4:6])
         rew_pose_r        = self.target_standing_pose * rew_pose(inputs.joint_pos, inputs.target_standing_pose)
         rew_jpos_track_r  = self.joint_pos_tracking   * rew_joint_pos_tracking(inputs.joint_pos, inputs.joint_pos_target)
-        height_error = torch.relu(self.height_target - inputs.z_height)  # only penalize below target
+        height_error = inputs.z_height - self.height_target
         rew_height_r  = self.height * torch.exp(-torch.square(height_error) / (self.height_sigma * self.height_sigma))
 
         # --- gait (optional) ---
