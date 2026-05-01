@@ -17,7 +17,7 @@ params:
   # doesn't have this fine grained control but made it close
   network:
     name: actor_critic
-    separate: False
+    separate: false
     space:
       continuous:
         mu_activation: tanh
@@ -28,9 +28,9 @@ params:
         sigma_init:
           name: const_initializer
           val: 0
-        fixed_sigma: True
+        fixed_sigma: true
     mlp:
-      units: [128, 64]
+      units: [256, 128, 64]
       activation: elu
       d2rl: False
 
@@ -62,7 +62,7 @@ params:
     lr_schedule: adaptive
     kl_threshold: 0.008
     score_to_win: 50000
-    max_epochs: 1500          # was 500 — biped standing from scratch needs 1000-2000 epochs
+    max_epochs: 7000
     save_best_after: 50
     save_frequency: 25
     grad_norm: 1.0
