@@ -91,10 +91,10 @@ class RewardCfg:
 
     # survival — always active, shared across all policies
     alive:                float = 10.0
-    terminated:           float = -10.0
+    terminated:           float = -0.0
 
     # balance
-    upright:              float = 1.0
+    upright:              float = 0.0
     flat_orientation_l2:  float = 0.0  # shifted bowl penalty; set negative to penalize
     # target projected_gravity XY in body frame — shifts the bowl minimum away from perfectly vertical.
     # (0, 0) = vertical; (0, -0.0664) = 3.8° forward lean (COM over support center).
@@ -112,7 +112,7 @@ class RewardCfg:
 
     # contact quality
     toe_walking:          float = 0.0  # penalize calf ground contact
-    alternating_contact:  float = 1.0  # reward alternating foot contact
+    alternating_contact:  float = 0.0  # reward alternating foot contact
     friction_cone:        float = 0.0  # penalize lateral vs normal force ratio on toes
 
     # smoothness
@@ -130,10 +130,10 @@ class RewardCfg:
     height_sigma:         float = 0.01  # tolerance width in m
 
     # gait (optional; requires ContactSensorCfg(track_air_time=True) on toes)
-    feet_air_time_biped:  float = 0.2  # single-stance shaping based on air/contact timers
+    feet_air_time_biped:  float = 0.0  # single-stance shaping based on air/contact timers
     feet_air_time_biped_threshold_s: float = 0.15
     feet_slide:           float = 0.0  # penalize toe sliding when in force-threshold contact
-    toe_clearance_biped:  float = 0.02  # reward swing toe clearance during single-stance
+    toe_clearance_biped:  float = 0.0  # reward swing toe clearance during single-stance
     toe_clearance_biped_height_m: float = 0.02
     both_feet_airborne:   float = 0.0  # penalize both feet off ground simultaneously
     joint_pos_tracking:   float = 0.0  # penalize MSE between actual and target joint positions
