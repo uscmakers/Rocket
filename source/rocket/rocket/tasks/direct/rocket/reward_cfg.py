@@ -289,13 +289,10 @@ POLICIES: dict[str, RewardCfg] = {
 
     "standing": RewardCfg(
         # uprightness & balance
-        upright             =  0.0,
-        flat_orientation_l2 = -1.0,
+        flat_orientation_l2 = -0.5,
         height              =  1.0,
 
         # locomotion
-        lin_vel             = -0.0,
-        vertical_vel        = -0.0,
         forward_vel_l2      = -0.5,
         forward_vel_threshold = 0.02,
 
@@ -304,27 +301,18 @@ POLICIES: dict[str, RewardCfg] = {
         feet_air_time_biped =  2.0,
         toe_clearance_biped =  1.0,
         both_feet_airborne  = -0.5,
-        joint_pos_tracking  = -1.0,
-
-        # reduce jittering
-        feet_slide          = -0.0,
-        friction_cone       = -0.0,
+        joint_pos_tracking  =  0.0,
 
         # action smoothness
         action_rate         = -0.005,
-        jerk                = -0.0,
         joint_acc           = -1.25e-7,
     ),
 
     "walking": RewardCfg(
-        upright             =  0.0,
         flat_orientation_l2 = -0.5,
         height              =  1.0,
 
-        forward_vel         =  0.0,
         forward_vel_track   =  2.0,
-        backward_vel        = -0.0,
-        vertical_vel        = -0.0,
 
         toe_walking         =  3.0,
         feet_air_time_biped =  2.0,
@@ -332,11 +320,8 @@ POLICIES: dict[str, RewardCfg] = {
         both_feet_airborne  = -0.5,
         joint_pos_tracking  = -0.0,
 
-        feet_slide          = -0.0,
-
         action_rate         = -0.005,
         joint_acc           = -1.25e-7,
-        jerk                =  0.0,
     ),
 
 }
