@@ -59,7 +59,7 @@ class StepperActuator(ActuatorBase):
         damping: torch.Tensor | float,
         armature: torch.Tensor | float,
         friction: torch.Tensor | float,
-        limits: torch.Tensor | None,
+        limits: torch.Tensor | None = None,
         **kwargs,
     ):
         super().__init__(cfg, joint_names, joint_ids, num_envs, device,
