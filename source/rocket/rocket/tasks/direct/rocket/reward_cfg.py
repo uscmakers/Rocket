@@ -22,6 +22,7 @@ import torch
 
 from .reward_utils import (
     rew_upright,
+    rew_com_over_support,
     rew_flat_orientation_l2,
     rew_flat_orientation_l2_from_projected_gravity_b,
     rew_heading_vel,
@@ -70,6 +71,8 @@ class RewardInput:
     toe_forces:           torch.Tensor  # (N, 2, 3) net contact forces on toes
     gait:                 GaitSignals | None = None
     projected_gravity_b:  torch.Tensor | None = None  # (N, 3) if available (MDP-style)
+    com_xy:               torch.Tensor | None = None  # (N, 2) projected COM in world XY
+    toe_pos_xy:           torch.Tensor | None = None  # (N, 2, 2) toe XY positions in world frame
 
 
 # =============================================================================
@@ -94,6 +97,7 @@ class RewardCfg:
     # balance
     upright:              float = 0.0    # YAML: 0.0
     flat_orientation_l2:  float = 0.0
+    balance_com:          float = 0.0   # COM over support polygon — same bowl as flat_orientation_l2
     # target projected_gravity XY in body frame — shifts the bowl minimum away from perfectly vertical.
     # (0, 0) = vertical; (0, -0.0664) = 3.8° forward lean (COM over support center).
     flat_orientation_l2_target_xy: tuple[float, float] = (0.0, -0.0664)
@@ -163,6 +167,11 @@ class RewardCfg:
         else:
             flat = rew_flat_orientation_l2(inputs.quat_w, _flat_target)
         rew_flat_r = self.flat_orientation_l2 * flat
+
+        if inputs.com_xy is not None and inputs.toe_pos_xy is not None:
+            rew_balance_com_r = self.balance_com * rew_com_over_support(inputs.com_xy, inputs.toe_pos_xy)
+        else:
+            rew_balance_com_r = torch.zeros_like(rew_alive)
 
         # --- velocity ---
         forward_vel, lateral_vel = rew_heading_vel(inputs.quat_w, inputs.root_lin_vel_w)
@@ -235,7 +244,7 @@ class RewardCfg:
 
         total = (
             rew_alive + rew_term
-            + rew_up + rew_flat_r
+            + rew_up + rew_flat_r + rew_balance_com_r
             + rew_lin_vel_r + rew_forward_vel_r + rew_forward_vel_track_r + rew_backward_vel_r + rew_lat_vel_r + rew_vert_vel_r + rew_forward_vel_l2_r
             + rew_toe_r + rew_alt_r + rew_friction_r
             + rew_rate_r + rew_jerk_r
@@ -248,6 +257,7 @@ class RewardCfg:
             "termination":          rew_term,
             "upright":              rew_up,
             "flat_orientation_l2":  rew_flat_r,
+            "balance_com":          rew_balance_com_r,
             "lin_vel":              rew_lin_vel_r,
             "forward_vel":          rew_forward_vel_r,
             "forward_vel_track":    rew_forward_vel_track_r,

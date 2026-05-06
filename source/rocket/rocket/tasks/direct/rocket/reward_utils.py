@@ -56,6 +56,23 @@ def rew_upright(quat_w: torch.Tensor) -> torch.Tensor:
     return torch.exp(-distance)
 
 @torch.jit.script
+def rew_com_over_support(
+    com_xy: torch.Tensor,      # (N, 2) projected COM in world XY
+    toe_pos_xy: torch.Tensor,  # (N, 2, 2) toe XY positions in world frame
+) -> torch.Tensor:
+    """L2 bowl penalty identical in shape to flat_orientation_l2.
+
+    Returns 0 when COM projects directly over the support centroid (midpoint of toes).
+    Grows quadratically as COM drifts off-center — same bowl as flat_orientation_l2.
+
+    Returns (N,) >= 0. Caller applies negative scale.
+    """
+    support_centroid = toe_pos_xy.mean(dim=1)           # (N, 2) midpoint of toes
+    error_xy = com_xy - support_centroid                 # (N, 2)
+    return torch.sum(torch.square(error_xy), dim=-1)    # (N,)
+
+
+@torch.jit.script
 def rew_flat_orientation_l2(quat_w: torch.Tensor, target_xy: torch.Tensor) -> torch.Tensor:
     """Shifted flat-orientation bowl penalty (fallback from quat).
 

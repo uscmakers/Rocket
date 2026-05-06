@@ -187,7 +187,14 @@ class RocketEnv(DirectRLEnv):
         env_dt = float(self.cfg.sim.dt * self.cfg.decimation)
 
         toe_vel_xy = self.robot.data.body_lin_vel_w[:, self._toe_body_ids, :2]
-        toe_pos_z = self.robot.data.body_pos_w[:, self._toe_body_ids, 2]
+        toe_pos_z  = self.robot.data.body_pos_w[:, self._toe_body_ids, 2]
+        toe_pos_xy = self.robot.data.body_pos_w[:, self._toe_body_ids, :2]   # (N, 2, 2)
+
+        # COM: mass-weighted average of all body positions projected to XY
+        body_pos_w = self.robot.data.body_pos_w                              # (N, num_bodies, 3)
+        masses     = self.robot.data.default_mass                             # (N, num_bodies)
+        total_mass = masses.sum(dim=-1)                                       # (N,)
+        com_xy     = (masses.unsqueeze(-1) * body_pos_w).sum(dim=1)[:, :2] / total_mass.unsqueeze(-1)  # (N, 2)
         gait = compute_gait_signals(self.contact_sensor_toes, toe_vel_xy=toe_vel_xy, toe_pos_z=toe_pos_z)
 
         joint_vel_ctrl = self.joint_vel[:, self._joint_ids]
@@ -212,6 +219,8 @@ class RocketEnv(DirectRLEnv):
             toe_forces           = self.contact_sensor_toes.data.net_forces_w,
             gait                 = gait,
             projected_gravity_b  = getattr(self.robot.data, "projected_gravity_b", None),
+            com_xy               = com_xy,
+            toe_pos_xy           = toe_pos_xy,
         )
 
         total_reward, components = self.cfg.rewards.compute(inputs)
