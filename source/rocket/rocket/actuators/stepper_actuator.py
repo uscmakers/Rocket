@@ -61,10 +61,11 @@ class StepperActuator(ActuatorBase):
         friction: torch.Tensor | float = 0.0,
         **kwargs,
     ):
-        # Isaac Lab versions vary in whether they pass `limits`; pop it safely.
-        limits = kwargs.pop("limits", None)
+        # Isaac Lab versions vary in whether they pass `limits`; discard it.
+        # The base class handles limits separately from the _parse_joint_parameter loop.
+        kwargs.pop("limits", None)
         super().__init__(cfg, joint_names, joint_ids, num_envs, device,
-                         stiffness, damping, armature, friction, limits)
+                         stiffness, damping, armature, friction)
 
         # Convert hardware register values → SI units for the sim
         self._params = StepperParams(
