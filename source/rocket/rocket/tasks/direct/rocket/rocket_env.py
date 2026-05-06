@@ -73,6 +73,8 @@ class RocketEnv(DirectRLEnv):
         joint_limits = self.robot.data.soft_joint_pos_limits[:, self._joint_ids]  # (num_envs, num_joints, 2)
         self.joint_delta_max = joint_limits[..., 1] - joint_limits[..., 0]  # full physical range (upper - lower)
         self._delta_target_pos = torch.zeros(self.num_envs, len(self._joint_ids), device=self.device)
+        # Seed the explicit actuator control action so _apply_actuator_model() doesn't get None on first reset.
+        self.robot.set_joint_position_target(self._delta_target_pos, joint_ids=self._joint_ids)
         print(f"Joint position limits: {joint_limits[0]}")
         print(f"Joint delta max: {self.joint_delta_max[0]}")
 
