@@ -298,7 +298,7 @@ POLICIES: dict[str, RewardCfg] = {
 
         # gait rewards
         toe_walking         =  3.0,
-        feet_air_time_biped =  2.0,
+        feet_air_time_biped =  0.0,
         toe_clearance_biped =  1.0,
         both_feet_airborne  = -0.5,
         joint_pos_tracking  =  0.0,
