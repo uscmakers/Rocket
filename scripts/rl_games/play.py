@@ -101,6 +101,9 @@ class PlayLogger:
         wandb.init(project="rocket-play", name=run_name, reinit=True)
         self._wandb = wandb
         self._step = 0
+        self._prev_joint_vel = None
+        self._prev_intended_pos = None
+        self._prev_intended_vel = None
 
     # Joint order matches _joint_ids = servo_joint_ids + stepper_joint_ids
     # servo_joint_names  = ["Revolute1", "Revolute2"]  → hip_servo_L, hip_servo_R
@@ -117,18 +120,32 @@ class PlayLogger:
         rocket_env = env.unwrapped
         joint_ids = rocket_env._joint_ids
 
-        joint_pos = rocket_env.robot.data.joint_pos[0, joint_ids].cpu()
-        joint_vel = rocket_env.robot.data.joint_vel[0, joint_ids].cpu()
-        torques   = rocket_env.robot.data.applied_torque[0, joint_ids].cpu()
+        dt = rocket_env.step_dt
+        joint_pos      = rocket_env.robot.data.joint_pos[0, joint_ids].cpu()
+        joint_vel      = rocket_env.robot.data.joint_vel[0, joint_ids].cpu()
+        torques        = rocket_env.robot.data.applied_torque[0, joint_ids].cpu()
+        intended_pos   = rocket_env._delta_target_pos[0, joint_ids].cpu()
+
+        actual_acc   = (joint_vel - self._prev_joint_vel) / dt if self._prev_joint_vel is not None else torch.zeros_like(joint_vel)
+        intended_vel = (intended_pos - self._prev_intended_pos) / dt if self._prev_intended_pos is not None else torch.zeros_like(intended_pos)
+        intended_acc = (intended_vel - self._prev_intended_vel) / dt if self._prev_intended_vel is not None else torch.zeros_like(intended_vel)
+
+        self._prev_joint_vel    = joint_vel.clone()
+        self._prev_intended_pos = intended_pos.clone()
+        self._prev_intended_vel = intended_vel.clone()
 
         data = {}
         for i, label in enumerate(self.JOINT_LABELS):
-            data[f"joint_pos/{label}"]    = joint_pos[i].item()
-            data[f"joint_vel/{label}"]    = joint_vel[i].item()
-            data[f"joint_torque/{label}"] = torques[i].item()
+            data[f"joint_pos/{label}"]          = joint_pos[i].item()
+            data[f"joint_vel/{label}"]          = joint_vel[i].item()
+            data[f"joint_torque/{label}"]       = torques[i].item()
+            data[f"joint_acc_actual/{label}"]   = actual_acc[i].item()
+            data[f"joint_acc_intended/{label}"] = intended_acc[i].item()
 
-        data["joint_vel/max_abs"]    = joint_vel.abs().max().item()
-        data["joint_torque/max_abs"] = torques.abs().max().item()
+        data["joint_vel/max_abs"]           = joint_vel.abs().max().item()
+        data["joint_torque/max_abs"]        = torques.abs().max().item()
+        data["joint_acc_actual/max_abs"]    = actual_acc.abs().max().item()
+        data["joint_acc_intended/max_abs"]  = intended_acc.abs().max().item()
 
         self._wandb.log(data, step=self._step)
         self._step += 1

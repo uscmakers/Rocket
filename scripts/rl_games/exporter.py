@@ -22,9 +22,6 @@ import torch
 import torch.nn as nn
 import yaml
 
-from rl_games.common import env_configurations, vecenv
-from isaaclab_rl.rl_games import RlGamesGpuEnv, RlGamesVecEnvWrapper
-
 
 class _ActorWrapper(nn.Module):
     """Wraps an rl_games model for deterministic inference: obs -> action means.
@@ -101,6 +98,17 @@ def _load_agent_cfg(agent_cfg_path: str) -> dict:
 
 
 def _register_rlgpu_env(env, rl_device: str, agent_cfg: dict) -> None:
+    # NOTE: These imports must happen after SimulationApp is created (AppLauncher.app),
+    # otherwise Isaac Sim/Omniverse complains about import order.
+    from rl_games.common import env_configurations, vecenv
+    try:
+        from isaaclab_rl.rl_games import RlGamesGpuEnv, RlGamesVecEnvWrapper
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            "Missing dependency 'isaaclab_rl'. Activate the IsaacLab environment that includes it "
+            "(or install it) before running exporter.py."
+        ) from exc
+
     clip_obs = agent_cfg["params"]["env"].get("clip_observations", float("inf"))
     clip_actions = agent_cfg["params"]["env"].get("clip_actions", float("inf"))
     obs_groups = agent_cfg["params"]["env"].get("obs_groups")
@@ -151,7 +159,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(args_cli: argparse.Namespace) -> None:
     import gymnasium as gym
-    from rl_games.common import env_configurations, vecenv
     from rl_games.common.player import BasePlayer
     from rl_games.torch_runner import Runner
 
@@ -162,8 +169,6 @@ def main(args_cli: argparse.Namespace) -> None:
         ManagerBasedRLEnvCfg,
         multi_agent_to_single_agent,
     )
-
-    from isaaclab_rl.rl_games import RlGamesGpuEnv, RlGamesVecEnvWrapper
 
     import isaaclab_tasks  # noqa: F401
     from isaaclab_tasks.utils.hydra import hydra_task_config
