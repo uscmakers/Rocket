@@ -83,28 +83,25 @@ class StepperActuator(ActuatorBase):
         # The MKS firmware ramps speed 100 times/sec; we apply continuously.
         self._acc_rad_s2 = self._params.acc_to_joint_rad_s2()
 
-        # Constant rated torque at output shaft while stepping (Nm)
-        # This is motor holding torque × gear_ratio — does NOT scale with error.
-        self._rated_torque = self._params.output_torque_nm()
-
-        # SEA stiffness/damping — physical joint compliance, NOT PD gains.
-        # stiffness: spring between motor output and joint (Nm/rad)
-        # damping:   damping in that spring / back-EMF (Nm·s/rad)
+        # SEA compliance — physical spring/damper between motor shaft and joint.
+        # stiffness: spring stiffness (Nm/rad), referenced to motor_setpoint (not final target)
+        # damping:   viscous damping (Nm·s/rad)
         self._stiffness = cfg.stiffness
-        self._damping = cfg.damping
+        self._damping   = cfg.damping
 
-        # Deadband: position errors below this are treated as "at target" (rad)
+        # Deadband: setpoint errors below this are treated as "at target" (rad)
         self._deadband = cfg.deadband_rad
 
         # MKS firmware updates the acceleration ramp every 10ms (100Hz).
-        # We track accumulated time to fire acc updates at the correct hardware rate
-        # rather than every physics sub-step (200Hz), matching real behaviour.
         self._acc_update_dt: float = 1.0 / cfg.acc_update_hz
         self._acc_time_accum = torch.zeros(num_envs, self.num_joints, device=device)
 
-        # Internal state: tracked commanded velocity per (env, joint)
-        # This implements the hardware velocity ramp across physics sub-steps.
+        # _cmd_vel: velocity of the motor's internal setpoint (rad/s), ramped trapezoidally.
         self._cmd_vel = torch.zeros(num_envs, self.num_joints, device=device)
+
+        # _motor_setpoint: the motor's current internal position reference (rad).
+        # Integrates _cmd_vel each physics step — this is what the PD tracks against actual joint pos.
+        self._motor_setpoint = torch.zeros(num_envs, self.num_joints, device=device)
 
         print(f"[StepperActuator] joints={joint_names}")
         print(f"  {self._params.summary()}")
@@ -113,9 +110,9 @@ class StepperActuator(ActuatorBase):
     # ------------------------------------------------------------------
 
     def reset(self, env_ids: torch.Tensor) -> None:
-        """Reset internal velocity and acc accumulator for terminated/reset environments."""
         self._cmd_vel[env_ids] = 0.0
         self._acc_time_accum[env_ids] = 0.0
+        self._motor_setpoint[env_ids] = 0.0
 
     # ------------------------------------------------------------------
 
@@ -133,92 +130,64 @@ class StepperActuator(ActuatorBase):
         which correctly approximates the hardware's 10ms update loop.
         """
 
-        # Physics sub-step dt (0.005s at 200 Hz)
         dt: float = sim_utils.SimulationContext.instance().get_physics_dt()
 
-        target_pos = control_action.joint_positions       # (num_envs, num_joints)
-        error = target_pos - joint_pos                    # positive = need to move forward
-
-        # Direction the motor needs to turn to reach target
-        direction = torch.sign(error)
-
-        # Are we close enough to consider "at target"?
-        at_target = error.abs() < self._deadband
+        target_pos = control_action.joint_positions  # (num_envs, num_joints)
 
         # ----------------------------------------------------------------
-        # Velocity ramp — trapezoidal profile matching MKS spec section 6.1
+        # Trapezoidal velocity profile — drives the internal motor setpoint.
+        # The profile generator works on setpoint distance, not actual joint
+        # distance. This matches how the real firmware operates: it plans a
+        # smooth trajectory independent of the actual encoder position.
         # ----------------------------------------------------------------
 
-        # Stopping distance: how far the joint travels to decelerate from
-        # current speed to 0 at the configured acc rate.
-        # Physics: d = v² / (2 × a)
+        setpoint_err = target_pos - self._motor_setpoint   # remaining setpoint travel
+        direction     = torch.sign(setpoint_err)
+        at_target     = setpoint_err.abs() < self._deadband
+
+        # Stopping distance: v² / (2a) — how far the setpoint travels if we
+        # start decelerating right now. When this equals remaining distance,
+        # begin deceleration so the setpoint arrives at target with zero velocity.
         stopping_dist = (self._cmd_vel.abs() ** 2) / (2.0 * self._acc_rad_s2 + 1e-8)
-
-        # Decelerate if:
-        #   (a) close enough to stop exactly at target, OR
-        #   (b) target is now in the opposite direction (need to stop before reversing)
         wrong_direction = (~at_target) & (self._cmd_vel.abs() > 1e-4) & (torch.sign(self._cmd_vel) != direction)
-        needs_decel = (error.abs() <= stopping_dist) | wrong_direction
+        needs_decel   = (setpoint_err.abs() <= stopping_dist) | wrong_direction
 
-        # Desired commanded velocity:
-        #   - at target       → 0 (stopped)
-        #   - needs decel     → 0 (ramp down toward 0)
-        #   - otherwise       → max_vel in direction of error (ramp up)
         target_cmd_vel = torch.where(
             at_target,
             torch.zeros_like(self._cmd_vel),
-            torch.where(
-                needs_decel,
-                torch.zeros_like(self._cmd_vel),
-                direction * self._max_vel,
-            )
+            torch.where(needs_decel, torch.zeros_like(self._cmd_vel), direction * self._max_vel),
         )
 
-        # Ramp _cmd_vel toward target_cmd_vel at the hardware acc rate (10ms / 100Hz).
-        # Accumulate physics sub-step time; only fire an acc increment when 10ms has
-        # elapsed, matching the MKS firmware's internal update loop exactly.
+        # Acc ramp fires every 10ms (100 Hz), matching MKS firmware update rate.
         self._acc_time_accum += dt
         acc_fired = self._acc_time_accum >= self._acc_update_dt
-        acc_step = torch.where(
+        acc_step  = torch.where(
             acc_fired,
             torch.full_like(self._cmd_vel, self._acc_rad_s2 * self._acc_update_dt),
             torch.zeros_like(self._cmd_vel),
         )
-        self._acc_time_accum = torch.where(
-            acc_fired, torch.zeros_like(self._acc_time_accum), self._acc_time_accum
-        )
+        self._acc_time_accum = torch.where(acc_fired, torch.zeros_like(self._acc_time_accum), self._acc_time_accum)
         diff = target_cmd_vel - self._cmd_vel
-        self._cmd_vel = (self._cmd_vel + diff.clamp(-acc_step, acc_step)).clamp(
-            -self._max_vel, self._max_vel
+        self._cmd_vel = (self._cmd_vel + diff.clamp(-acc_step, acc_step)).clamp(-self._max_vel, self._max_vel)
+
+        # Advance motor setpoint along the trapezoidal profile.
+        # Clamp so the setpoint never overshoots the target.
+        self._motor_setpoint = (self._motor_setpoint + self._cmd_vel * dt).clamp(
+            torch.minimum(target_pos, self._motor_setpoint),
+            torch.maximum(target_pos, self._motor_setpoint),
         )
 
         # ----------------------------------------------------------------
-        # Effort computation
+        # SEA effort — spring between motor output shaft and joint.
+        # The motor shaft follows the trapezoidal setpoint; the SEA spring
+        # transmits force from shaft to joint. When the motor is moving,
+        # the spring reference is the current shaft position (motor_setpoint).
+        # When stopped at target, this naturally becomes the holding spring.
         # ----------------------------------------------------------------
 
-        moving = self._cmd_vel.abs() > 1e-4
-
-        # Stepping torque: constant rated torque while the motor is moving.
-        # This is the fundamental stepper behaviour — torque does NOT scale
-        # with position error, unlike a PD controller.
-        stepping_effort = torch.where(
-            moving,
-            torch.sign(self._cmd_vel) * self._rated_torque,
-            torch.zeros_like(self._cmd_vel),
-        )
-
-        # SEA spring: physical compliance between motor output and joint.
-        # Always active — models the joint's spring-like resistance to displacement.
-        # stiffness=80-100 Nm/rad represents the drivetrain compliance, NOT kp.
-        sea_spring = self._stiffness * error
-
-        # SEA damping: physical damping in the compliant element + back-EMF.
-        # Always active — resists velocity through the joint spring.
-        # damping=0.01 Nm·s/rad is very light, representing minimal back-EMF.
-        sea_damping = -self._damping * joint_vel
-
-        # Total effort = stepping + compliance, clamped to hardware torque limit
-        self.computed_effort = (stepping_effort + sea_spring + sea_damping).clamp(
+        sea_spring  =  self._stiffness * (self._motor_setpoint - joint_pos)
+        sea_damping = -self._damping   * joint_vel
+        self.computed_effort = (sea_spring + sea_damping).clamp(
             -self.effort_limit, self.effort_limit
         )
         self.applied_effort = self.computed_effort.clone()
@@ -258,11 +227,11 @@ class StepperActuatorCfg(ActuatorBaseCfg):
     gear_ratio: float = 5.0     # Physical gearbox ratio
     rated_torque_nm: float = 1.5  # Motor shaft rated torque (Nm) from datasheet
 
-    # --- SEA compliance parameters (physical, NOT control gains) ---
-    stiffness: float = 90.0     # Nm/rad — SEA spring (NOT kp)
-    damping: float = 0.01       # Nm·s/rad — back-EMF + compliance damping (NOT kd)
-    armature: float = 0.0       # rotor inertia reflected to joint (kg·m²) — near zero for steppers
-    friction: float = 0.0       # joint static friction (Nm) — handled by stepper holding torque
+    # --- SEA compliance (physical spring/damper between motor shaft and joint) ---
+    stiffness: float = 80.0     # Nm/rad — drivetrain spring stiffness
+    damping: float = 0.01        # Nm·s/rad — viscous damping (tune to suppress oscillation)
+    armature: float = 0.0       # rotor inertia reflected to joint (kg·m²)
+    friction: float = 0.0       # joint friction (Nm)
 
     # --- Isaac Lab required fields ---
     effort_limit: float = MISSING    # Set per joint group (hip vs knee)

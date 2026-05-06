@@ -57,19 +57,24 @@ def rew_upright(quat_w: torch.Tensor) -> torch.Tensor:
 
 @torch.jit.script
 def rew_com_over_support(
-    com_xy: torch.Tensor,      # (N, 2) projected COM in world XY
-    toe_pos_xy: torch.Tensor,  # (N, 2, 2) toe XY positions in world frame
+    com_xy: torch.Tensor,       # (N, 2)    projected COM in world XY
+    toe_pos_xy: torch.Tensor,   # (N, 2, 2) toe XY positions in world frame
+    toe_forces: torch.Tensor,   # (N, 2, 3) toe contact forces in world frame
 ) -> torch.Tensor:
     """L2 bowl penalty identical in shape to flat_orientation_l2.
 
-    Returns 0 when COM projects directly over the support centroid (midpoint of toes).
-    Grows quadratically as COM drifts off-center — same bowl as flat_orientation_l2.
+    Support centroid is weighted by vertical contact force per toe, so during
+    single stance only the grounded foot defines the target — the airborne foot
+    contributes nothing. Falls back to equal-weight midpoint when both airborne.
 
-    Returns (N,) >= 0. Caller applies negative scale.
+    Returns (N,) >= 0; 0 = COM over support centroid. Caller applies negative scale.
     """
-    support_centroid = toe_pos_xy.mean(dim=1)           # (N, 2) midpoint of toes
-    error_xy = com_xy - support_centroid                 # (N, 2)
-    return torch.sum(torch.square(error_xy), dim=-1)    # (N,)
+    weights = toe_forces[:, :, 2].clamp(min=0.0)                        # (N, 2) normal force
+    total_w = weights.sum(dim=-1, keepdim=True).clamp(min=1e-6)         # (N, 1)
+    norm_w  = weights / total_w                                          # (N, 2) sums to 1
+    support_centroid = (norm_w.unsqueeze(-1) * toe_pos_xy).sum(dim=1)   # (N, 2)
+    error_xy = com_xy - support_centroid                                  # (N, 2)
+    return torch.sum(torch.square(error_xy), dim=-1)                     # (N,)
 
 
 @torch.jit.script

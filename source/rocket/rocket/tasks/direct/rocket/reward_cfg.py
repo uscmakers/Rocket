@@ -169,7 +169,7 @@ class RewardCfg:
         rew_flat_r = self.flat_orientation_l2 * flat
 
         if inputs.com_xy is not None and inputs.toe_pos_xy is not None:
-            rew_balance_com_r = self.balance_com * rew_com_over_support(inputs.com_xy, inputs.toe_pos_xy)
+            rew_balance_com_r = self.balance_com * rew_com_over_support(inputs.com_xy, inputs.toe_pos_xy, inputs.toe_forces)
         else:
             rew_balance_com_r = torch.zeros_like(rew_alive)
 
