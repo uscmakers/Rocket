@@ -56,17 +56,19 @@ ROCKET_CFG = ArticulationCfg(
             joint_names_expr=["Revolute3", "Revolute4"],
             mstep=1, speed=10, acc=2, gear_ratio=5.0,
             rated_torque_nm=1.5,
-            stiffness=90.0,   # SEA spring compliance — NOT kp
-            damping=0.01,     # back-EMF — NOT kd
+            stiffness=90.0,
+            damping=0.5,
+            armature=7.5e-4,
             effort_limit=3.0,
-            velocity_limit=6.28,  # = speed_to_joint_rad_s() at speed=10, mstep=1, gear=5
+            velocity_limit=6.28,
         ),
         "knee_steppers": StepperActuatorCfg(
             joint_names_expr=["Revolute5", "Revolute6"],
             mstep=1, speed=10, acc=2, gear_ratio=5.0,
             rated_torque_nm=1.5,
-            stiffness=90.0,   # SEA spring compliance — NOT kp
-            damping=0.01,     # back-EMF — NOT kd
+            stiffness=90.0,
+            damping=0.5,
+            armature=7.5e-4,
             effort_limit=6.0,
             velocity_limit=6.28,
         ),

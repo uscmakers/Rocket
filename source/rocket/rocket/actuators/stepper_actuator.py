@@ -92,10 +92,6 @@ class StepperActuator(ActuatorBase):
         # Deadband: setpoint errors below this are treated as "at target" (rad)
         self._deadband = cfg.deadband_rad
 
-        # MKS firmware updates the acceleration ramp every 10ms (100Hz).
-        self._acc_update_dt: float = 1.0 / cfg.acc_update_hz
-        self._acc_time_accum = torch.zeros(num_envs, self.num_joints, device=device)
-
         # _cmd_vel: velocity of the motor's internal setpoint (rad/s), ramped trapezoidally.
         self._cmd_vel = torch.zeros(num_envs, self.num_joints, device=device)
 
@@ -111,7 +107,6 @@ class StepperActuator(ActuatorBase):
 
     def reset(self, env_ids: torch.Tensor) -> None:
         self._cmd_vel[env_ids] = 0.0
-        self._acc_time_accum[env_ids] = 0.0
         self._motor_setpoint[env_ids] = 0.0
 
     # ------------------------------------------------------------------
@@ -158,15 +153,9 @@ class StepperActuator(ActuatorBase):
             torch.where(needs_decel, torch.zeros_like(self._cmd_vel), direction * self._max_vel),
         )
 
-        # Acc ramp fires every 10ms (100 Hz), matching MKS firmware update rate.
-        self._acc_time_accum += dt
-        acc_fired = self._acc_time_accum >= self._acc_update_dt
-        acc_step  = torch.where(
-            acc_fired,
-            torch.full_like(self._cmd_vel, self._acc_rad_s2 * self._acc_update_dt),
-            torch.zeros_like(self._cmd_vel),
-        )
-        self._acc_time_accum = torch.where(acc_fired, torch.zeros_like(self._acc_time_accum), self._acc_time_accum)
+        # Acc ramp applied every physics substep (200Hz), scaled by dt.
+        # Total acceleration per second is identical to 100Hz firing — smoother interpolation.
+        acc_step = self._acc_rad_s2 * dt
         diff = target_cmd_vel - self._cmd_vel
         self._cmd_vel = (self._cmd_vel + diff.clamp(-acc_step, acc_step)).clamp(-self._max_vel, self._max_vel)
 
@@ -230,7 +219,7 @@ class StepperActuatorCfg(ActuatorBaseCfg):
     # --- SEA compliance (physical spring/damper between motor shaft and joint) ---
     stiffness: float = 80.0     # Nm/rad — drivetrain spring stiffness
     damping: float = 0.01        # Nm·s/rad — viscous damping (tune to suppress oscillation)
-    armature: float = 0.0       # rotor inertia reflected to joint (kg·m²)
+    armature: float = 7.5e-4    # rotor inertia reflected to joint: J_rotor(3e-5) × gear_ratio²(25)
     friction: float = 0.0       # joint friction (Nm)
 
     # --- Isaac Lab required fields ---
