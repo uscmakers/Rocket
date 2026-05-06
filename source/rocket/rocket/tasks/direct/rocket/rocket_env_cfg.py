@@ -10,6 +10,7 @@ import isaaclab.envs.mdp as mdp
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
+from rocket.actuators import StepperActuatorCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.managers import EventTermCfg as EventTerm, SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
@@ -51,19 +52,23 @@ ROCKET_CFG = ArticulationCfg(
             stiffness=120.0,   # position-controlled: needs spring stiffness
             damping=10.0,
         ),
-        "hip_steppers": ImplicitActuatorCfg(
+        "hip_steppers": StepperActuatorCfg(
             joint_names_expr=["Revolute3", "Revolute4"],
-            effort_limit=3,
-            velocity_limit=6.2,
-            stiffness=200.0,
-            damping=10.0,
+            mstep=1, speed=10, acc=2, gear_ratio=5.0,
+            rated_torque_nm=1.5,
+            stiffness=90.0,   # SEA spring compliance — NOT kp
+            damping=0.01,     # back-EMF — NOT kd
+            effort_limit=3.0,
+            velocity_limit=6.28,  # = speed_to_joint_rad_s() at speed=10, mstep=1, gear=5
         ),
-        "knee_steppers": ImplicitActuatorCfg(
+        "knee_steppers": StepperActuatorCfg(
             joint_names_expr=["Revolute5", "Revolute6"],
-            effort_limit=6,
-            velocity_limit=6.2,
-            stiffness=200.0,
-            damping=10.0,
+            mstep=1, speed=10, acc=2, gear_ratio=5.0,
+            rated_torque_nm=1.5,
+            stiffness=90.0,   # SEA spring compliance — NOT kp
+            damping=0.01,     # back-EMF — NOT kd
+            effort_limit=6.0,
+            velocity_limit=6.28,
         ),
     },
 )
