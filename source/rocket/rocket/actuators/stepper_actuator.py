@@ -55,13 +55,14 @@ class StepperActuator(ActuatorBase):
         joint_ids: list[int],
         num_envs: int,
         device: str,
-        stiffness: torch.Tensor | float,
-        damping: torch.Tensor | float,
-        armature: torch.Tensor | float,
-        friction: torch.Tensor | float,
-        limits: torch.Tensor | None = None,
+        stiffness: torch.Tensor | float = 0.0,
+        damping: torch.Tensor | float = 0.0,
+        armature: torch.Tensor | float = 0.0,
+        friction: torch.Tensor | float = 0.0,
         **kwargs,
     ):
+        # Isaac Lab versions vary in whether they pass `limits`; pop it safely.
+        limits = kwargs.pop("limits", None)
         super().__init__(cfg, joint_names, joint_ids, num_envs, device,
                          stiffness, damping, armature, friction, limits)
 
@@ -250,17 +251,10 @@ class StepperActuatorCfg(ActuatorBaseCfg):
     rated_torque_nm: float = 1.5  # Motor shaft rated torque (Nm) from datasheet
 
     # --- SEA compliance parameters (physical, NOT control gains) ---
-    # stiffness: spring stiffness of joint compliance (Nm/rad)
-    #   Models the physical spring-like resistance of the drivetrain.
-    #   Higher → stiffer joint, less flex between motor and load.
-    #   Recommended: 80-100 Nm/rad for a rigid-ish stepper drivetrain.
     stiffness: float = 90.0     # Nm/rad — SEA spring (NOT kp)
-
-    # damping: damping coefficient of joint compliance (Nm·s/rad)
-    #   Models back-EMF and physical damping in the drivetrain spring.
-    #   Very small for steppers — back-EMF is minimal.
-    #   Recommended: 0.01 Nm·s/rad
     damping: float = 0.01       # Nm·s/rad — back-EMF + compliance damping (NOT kd)
+    armature: float = 0.0       # rotor inertia reflected to joint (kg·m²) — near zero for steppers
+    friction: float = 0.0       # joint static friction (Nm) — handled by stepper holding torque
 
     # --- Isaac Lab required fields ---
     effort_limit: float = MISSING    # Set per joint group (hip vs knee)
