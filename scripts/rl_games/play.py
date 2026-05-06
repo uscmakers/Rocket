@@ -124,7 +124,7 @@ class PlayLogger:
         joint_pos      = rocket_env.robot.data.joint_pos[0, joint_ids].cpu()
         joint_vel      = rocket_env.robot.data.joint_vel[0, joint_ids].cpu()
         torques        = rocket_env.robot.data.applied_torque[0, joint_ids].cpu()
-        intended_pos   = rocket_env._delta_target_pos[0, joint_ids].cpu()
+        intended_pos   = rocket_env._delta_target_pos[0].cpu()
 
         actual_acc   = (joint_vel - self._prev_joint_vel) / dt if self._prev_joint_vel is not None else torch.zeros_like(joint_vel)
         intended_vel = (intended_pos - self._prev_intended_pos) / dt if self._prev_intended_pos is not None else torch.zeros_like(intended_pos)
