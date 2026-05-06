@@ -124,7 +124,7 @@ class StepperActuator(ActuatorBase):
         control_action,
         joint_pos: torch.Tensor,
         joint_vel: torch.Tensor,
-    ) -> None:
+    ):
         """
         Compute effort to apply each physics sub-step.
 
@@ -222,6 +222,13 @@ class StepperActuator(ActuatorBase):
             -self.effort_limit, self.effort_limit
         )
         self.applied_effort = self.computed_effort.clone()
+
+        # Isaac Lab expects compute() to return the control_action with efforts filled in.
+        # Setting positions/velocities to None tells PhysX to use effort control only.
+        control_action.joint_positions = None
+        control_action.joint_velocities = None
+        control_action.joint_efforts = self.applied_effort
+        return control_action
 
 
 # ---------------------------------------------------------------------------
