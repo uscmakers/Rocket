@@ -192,7 +192,7 @@ class RocketEnv(DirectRLEnv):
 
         # COM: mass-weighted average of all body positions projected to XY
         body_pos_w = self.robot.data.body_pos_w                              # (N, num_bodies, 3)
-        masses     = self.robot.data.default_mass                             # (N, num_bodies)
+        masses     = self.robot.data.default_mass.to(body_pos_w.device)        # (N, num_bodies)
         total_mass = masses.sum(dim=-1)                                       # (N,)
         com_xy     = (masses.unsqueeze(-1) * body_pos_w).sum(dim=1)[:, :2] / total_mass.unsqueeze(-1)  # (N, 2)
         gait = compute_gait_signals(self.contact_sensor_toes, toe_vel_xy=toe_vel_xy, toe_pos_z=toe_pos_z)
